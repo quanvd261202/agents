@@ -107,10 +107,15 @@ class LayoutResolver:
         d = self._reg.get(spec.type.value)
         base = self._base_props(spec, d.css_display, d.default_columns, d.default_ratio)
         overrides = {**d.default_responsive, **spec.responsive}
+        # Each breakpoint carries a complete snapshot, so the renderer never merges deltas itself
+        # and a collapse declared at one breakpoint cannot leak into a larger one.
         responsive: dict[Breakpoint, dict[str, Any]] = {}
-        for bp in _BP_ORDER:
-            if bp in overrides:
-                responsive[bp] = self._override_props(spec, overrides[bp], base)
+        if overrides:
+            for bp in _BP_ORDER:
+                snapshot = dict(base)
+                if bp in overrides:
+                    snapshot.update(self._override_props(spec, overrides[bp], base))
+                responsive[bp] = snapshot
         return ResolvedLayout(type=spec.type.value, props=base, responsive=responsive)
 
     @staticmethod

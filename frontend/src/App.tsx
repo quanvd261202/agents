@@ -1,5 +1,5 @@
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
-import { COMPONENTS, type NodeProps } from "./components";
+import { COMPONENTS, CONTAINERS, type NodeProps } from "./components";
 import { Animated } from "./animate";
 import { currentBreakpoint, layoutStyle } from "./layout";
 import type { Breakpoint, RenderModel, RenderNode } from "./types";
@@ -31,18 +31,27 @@ function Node({ node, bp, reduced }: { node: RenderNode; bp: Breakpoint; reduced
     return <div data-render-error={node.id} role="alert" style={{ padding: 16, border: "2px solid #dc2626", color: "#dc2626" }}>
       Unknown implementation “{node.implementation}”</div>;
   }
-  const { style, hideSecondary } = layoutStyle(node.layout, bp);
+  const { style, hideSecondary, columns } = layoutStyle(node.layout, bp);
   const children = node.children.map((c) => <Node key={c.id} node={c} bp={bp} reduced={reduced} />);
-  const props: NodeProps = { node, children, hasChildren: node.children.length > 0 };
-  const inner = <NodeBoundary node={node}><Impl {...props} /></NodeBoundary>;
   const hasLayout = node.layout !== null;
-  if (!hasLayout && !node.animation) return <div data-node={node.id} data-semantic={node.semantic_type}>{inner}</div>;
+  const tokenVars = Object.fromEntries(Object.entries(node.tokens).map(([k, v]) => [`--component-${k}`, v]));
+  if (CONTAINERS.has(node.implementation)) {
+    // The container element carries the layout itself, so its grid tracks apply to the child nodes.
+    return <NodeBoundary node={node}>
+      <Impl node={node} children={children} hasChildren={node.children.length > 0} columns={columns}
+        className={hideSecondary ? "uib-hidden-secondary" : undefined}
+        style={hasLayout ? { ...style, ...tokenVars } : undefined} />
+    </NodeBoundary>;
+  }
+  const props: NodeProps = {
+    node, children, hasChildren: node.children.length > 0, columns,
+    tracks: typeof style.gridTemplateColumns === "string" ? style.gridTemplateColumns : undefined,
+    gap: typeof style.gap === "string" ? style.gap : undefined,
+  };
+  const inner = <NodeBoundary node={node}><Impl {...props} /></NodeBoundary>;
+  if (!node.animation) return <div data-node={node.id} data-semantic={node.semantic_type} style={tokenVars}>{inner}</div>;
   return (
-    <Animated id={node.id} animation={node.animation} forceReduced={reduced}
-      className={hideSecondary ? "uib-hidden-secondary" : undefined}
-      style={hasLayout ? { ...style, ...Object.fromEntries(Object.entries(node.tokens).map(([k, v]) => [`--component-${k}`, v])) } : undefined}>
-      {inner}
-    </Animated>
+    <Animated id={node.id} animation={node.animation} forceReduced={reduced} style={tokenVars}>{inner}</Animated>
   );
 }
 

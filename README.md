@@ -38,9 +38,16 @@ All registries share `app.core.registry.BaseRegistry` (register/get/exists/list/
 
 ## Frontend renderer
 
-`frontend/` is a Vite + React + Motion app. It is a pure function of the `RenderModel`: a tree walker
-maps each node's `implementation` name to a React component and applies resolved layout, tokens and
-Motion config. Unknown implementations surface as structured errors, never as silent fallback UI.
+`frontend/` is a Vite + React + Motion app and a pure function of the `RenderModel`. A tree walker
+maps each node's `implementation` name to a React component. Pure containers (`Page`, `Main`) apply
+the resolved layout to their own element; every other component receives the resolved column count
+and grid tracks for the current breakpoint and applies them to its own collection, so a section is
+never boxed inside a grid track that starves the grid within it. Unknown implementations and
+component crashes surface as structured, visible errors, never as silent fallback UI.
+
+The layout resolver emits a complete snapshot per breakpoint rather than deltas, so the renderer
+never merges cascading overrides and a collapse declared at one breakpoint cannot leak into a
+larger one.
 
 ```bash
 npm --prefix frontend install

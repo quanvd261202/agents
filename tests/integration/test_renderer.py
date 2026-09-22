@@ -9,6 +9,7 @@ import pytest
 from app.dsl import default_design_resolver
 from app.models import DesignSpec
 from app.models.common import Breakpoint
+from app.models.dsl import LayoutIntent
 from app.renderer import PlaywrightRenderer, StaticServer
 from app.renderer.server import FRONTEND_DIST
 from tests.fixtures.specs import ALL
@@ -70,7 +71,7 @@ async def test_deterministic_checks_catch_a_broken_layout(server, resolver, tmp_
     sections = []
     for s in spec.sections:
         if s.id == "features":
-            s = s.model_copy(update={"layout": {"type": "bento", "columns": 6, "responsive": {}}})
+            s = s.model_copy(update={"layout": LayoutIntent(type="bento", columns=6)})
         sections.append(s)
     model = resolver.resolve(spec.model_copy(update={"sections": sections}))
     # strip the mobile collapse the layout engine adds, simulating a bad fix

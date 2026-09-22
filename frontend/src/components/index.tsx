@@ -1,7 +1,15 @@
-import type { FC, ReactNode } from "react";
+import type { CSSProperties, FC, ReactNode } from "react";
 import type { RenderNode } from "../types";
 
-export interface NodeProps { node: RenderNode; children: ReactNode; hasChildren: boolean; }
+export interface NodeProps {
+  node: RenderNode; children: ReactNode; hasChildren: boolean;
+  /** Resolved by the layout engine for the current breakpoint. */
+  columns?: number; tracks?: string; gap?: string;
+  style?: CSSProperties; className?: string;
+}
+
+/** Pure containers: the resolved layout applies to their own element so grid tracks reach the children. */
+export const CONTAINERS = new Set(["Page", "Main"]);
 const p = (n: RenderNode, key: string, fallback: string) => (n.props[key] as string) ?? fallback;
 
 const Inner: FC<{ children: ReactNode; wide?: boolean }> = ({ children, wide }) => (
@@ -14,20 +22,32 @@ const Placeholder: FC<{ ratio?: string; label?: string }> = ({ ratio = "16/10", 
 const Btn: FC<{ children: ReactNode; secondary?: boolean }> = ({ children, secondary }) => (
   <button type="button" className={secondary ? "uib-btn secondary" : "uib-btn"}>{children}</button>
 );
-const Grid: FC<{ cols: number; gap?: string; children: ReactNode }> = ({ cols, gap = "var(--spacing-lg)", children }) => (
-  <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap }}>{children}</div>
+/** `cols` from the deterministic layout engine wins; otherwise fall back to the responsive default. */
+const Grid: FC<{ cols?: number; fallback: number; gap?: string; children: ReactNode }> = ({ cols, fallback, gap, children }) => (
+  <div className="uib-grid" style={{ ["--cols" as any]: cols ?? fallback, ...(gap ? { gap } : {}),
+    ...(cols ? { gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))` } : {}) }}>{children}</div>
+);
+
+/** A two-pane split. Uses the engine's resolved tracks when it produced any. */
+const Split: FC<{ tracks?: string; start?: boolean; children: ReactNode }> = ({ tracks, start, children }) => (
+  <div className={start ? "uib-split start" : "uib-split"} style={tracks ? { gridTemplateColumns: tracks } : undefined}>{children}</div>
 );
 const repeat = (n: number) => Array.from({ length: n }, (_, i) => i);
 
 /* ---------------------------------------------------------------- structure */
-const Page: FC<NodeProps> = ({ children }) => <div data-page>{children}</div>;
-const Main: FC<NodeProps> = ({ children }) => <main>{children}</main>;
+const Page: FC<NodeProps> = ({ children, style, className, node }) => (
+  <div data-page data-node={node.id} style={style} className={className}>{children}</div>
+);
+const Main: FC<NodeProps> = ({ children, style, className, node }) => (
+  <main data-node={node.id} style={style} className={className}>{children}</main>
+);
 
 const NavBar: FC<NodeProps> = ({ node }) => (
   <nav className="uib-nav" aria-label="Main">
     <strong>{p(node, "logo", "Acme")}</strong>
-    <div>{["Product", "Pricing", "Docs", "Company"].map((l) => <a key={l} href={`#${l}`}>{l}</a>)}</div>
-    <div style={{ display: "flex", gap: "var(--spacing-sm)" }}>
+    <div className="uib-nav-links">{["Product", "Pricing", "Docs", "Company"].map((l) => <a key={l} href={`#${l}`}>{l}</a>)}</div>
+    <div className="uib-nav-actions">
+      <button type="button" className="uib-nav-toggle" aria-label="Open menu" aria-expanded="false">≡</button>
       <Btn secondary>Sign in</Btn><Btn>{p(node, "actions", "Get started")}</Btn>
     </div>
   </nav>
@@ -58,11 +78,11 @@ const PageHeader: FC<NodeProps> = ({ node }) => (
   </header>
 );
 
-const Footer: FC<NodeProps> = ({ node }) => (
+const Footer: FC<NodeProps> = ({ node, columns }) => (
   <footer className="uib-section" style={{ paddingBlock: "var(--spacing-xl)", borderTop: "1px solid var(--color-border)" }}>
     <Inner>
       {node.props.variant !== "minimal" && (
-        <Grid cols={4}>{["Product", "Company", "Resources", "Legal"].map((c) => (
+        <Grid cols={columns} fallback={4}>{["Product", "Company", "Resources", "Legal"].map((c) => (
           <div key={c}><strong>{c}</strong>
             <ul style={{ listStyle: "none", padding: 0, marginTop: "var(--spacing-sm)" }}>
               {repeat(3).map((i) => <li key={i} style={{ padding: "4px 0" }}><a href="#" className="uib-muted" style={{ textDecoration: "none" }}>{c} link {i + 1}</a></li>)}
@@ -74,7 +94,7 @@ const Footer: FC<NodeProps> = ({ node }) => (
 );
 
 /* ---------------------------------------------------------------- marketing */
-const Hero: FC<NodeProps> = ({ node }) => {
+const Hero: FC<NodeProps> = ({ node, tracks }) => {
   const stacked = node.props.variant === "centered" || node.props.variant === "aurora";
   const copy = (
     <div style={{ display: "grid", gap: "var(--spacing-md)", justifyItems: stacked ? "center" : "start", textAlign: stacked ? "center" : "left" }}>
@@ -91,13 +111,13 @@ const Hero: FC<NodeProps> = ({ node }) => {
     <section className="uib-section" aria-label="Hero" style={node.props.variant === "aurora"
       ? { background: "radial-gradient(1200px 500px at 50% -10%, var(--color-accent), transparent 70%)" } : undefined}>
       <Inner>{stacked ? <div style={{ display: "grid", gap: "var(--spacing-xl)", justifyItems: "center" }}>{copy}<Placeholder label="product preview" /></div>
-        : <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-xl)", alignItems: "center" }}>{copy}<Placeholder label="product preview" /></div>}</Inner>
+        : <Split tracks={tracks}>{copy}<Placeholder label="product preview" /></Split>}</Inner>
     </section>
   );
 };
 
 const SocialProof: FC<NodeProps> = () => (
-  <section className="uib-section" style={{ paddingBlock: "var(--spacing-xl)" }} aria-label="Trusted by">
+  <section className="uib-section" style={{ paddingBlock: "var(--spacing-xl)", overflow: "hidden" }} aria-label="Trusted by">
     <Inner><p className="uib-eyebrow" style={{ textAlign: "center", marginBottom: "var(--spacing-lg)" }}>Trusted by teams at</p>
       <div style={{ display: "flex", gap: "var(--spacing-xl)", justifyContent: "center", flexWrap: "wrap", opacity: .65 }}>
         {["Northwind", "Contoso", "Globex", "Initech", "Umbrella"].map((n) => <strong key={n}>{n}</strong>)}
@@ -113,11 +133,11 @@ const FeatureCard: FC<NodeProps> = ({ node }) => (
   </article>
 );
 
-const FeatureBento: FC<NodeProps> = ({ node, children, hasChildren }) => (
+const FeatureBento: FC<NodeProps> = ({ node, children, hasChildren, columns }) => (
   <section className="uib-section" aria-label="Features">
     <Inner><h2 style={{ marginBottom: "var(--spacing-lg)" }}>{p(node, "title", "Everything you need to ship")}</h2>
-      {hasChildren ? children : <Grid cols={3}>{repeat(6).map((i) => (
-        <article key={i} className="uib-card"><h3>Feature {i + 1}</h3><p className="uib-muted" style={{ marginTop: 8 }}>A capability that earns its place on the page.</p></article>))}</Grid>}
+      <Grid cols={columns} fallback={3}>{hasChildren ? children : repeat(6).map((i) => (
+        <article key={i} className="uib-card"><h3>Feature {i + 1}</h3><p className="uib-muted" style={{ marginTop: 8 }}>A capability that earns its place on the page.</p></article>))}</Grid>
     </Inner>
   </section>
 );
@@ -128,17 +148,17 @@ const ProductShowcase: FC<NodeProps> = () => (
   </section>
 );
 
-const Metrics: FC<NodeProps> = () => (
+const Metrics: FC<NodeProps> = ({ columns }) => (
   <section className="uib-section" aria-label="Results">
-    <Inner><Grid cols={4}>{[["3.2x", "faster delivery"], ["98%", "pass rate"], ["12k", "screens generated"], ["< 5s", "median render"]].map(([v, l]) => (
+    <Inner><Grid cols={columns} fallback={4}>{[["3.2x", "faster delivery"], ["98%", "pass rate"], ["12k", "screens generated"], ["< 5s", "median render"]].map(([v, l]) => (
       <div key={l}><p style={{ fontSize: "2.5rem", fontWeight: 700, letterSpacing: "-0.03em" }}>{v}</p><p className="uib-muted">{l}</p></div>))}</Grid></Inner>
   </section>
 );
 
-const Testimonials: FC<NodeProps> = () => (
+const Testimonials: FC<NodeProps> = ({ columns }) => (
   <section className="uib-section" aria-label="Testimonials">
     <Inner><h2 style={{ marginBottom: "var(--spacing-lg)" }}>What teams say</h2>
-      <Grid cols={3}>{repeat(3).map((i) => (
+      <Grid cols={columns} fallback={3}>{repeat(3).map((i) => (
         <blockquote key={i} className="uib-card" style={{ margin: 0 }}>
           <p>“It replaced three weeks of design QA with a pipeline we can actually reason about.”</p>
           <footer style={{ display: "flex", gap: "var(--spacing-sm)", alignItems: "center", marginTop: "var(--spacing-md)" }}>
@@ -148,10 +168,10 @@ const Testimonials: FC<NodeProps> = () => (
   </section>
 );
 
-const PricingTable: FC<NodeProps> = ({ node }) => (
+const PricingTable: FC<NodeProps> = ({ node, columns }) => (
   <section className="uib-section" aria-label="Pricing">
     <Inner><h2 style={{ marginBottom: "var(--spacing-lg)", textAlign: "center" }}>Simple pricing</h2>
-      <Grid cols={3}>{[["Starter", "$0"], ["Team", "$49"], ["Scale", "$199"]].map(([name, price], i) => (
+      <Grid cols={columns} fallback={3}>{[["Starter", "$0"], ["Team", "$49"], ["Scale", "$199"]].map(([name, price], i) => (
         <div key={name} className="uib-card" style={i === 1 && node.props.variant === "highlighted"
           ? { borderColor: "var(--color-primary)", boxShadow: "var(--shadow-lg)" } : undefined}>
           {i === 1 && <span className="uib-eyebrow">Most popular</span>}
@@ -196,18 +216,18 @@ const ProductCard: FC<NodeProps> = ({ node }) => (
   </article>
 );
 
-const ProductGrid: FC<NodeProps> = ({ children, hasChildren }) => (
+const ProductGrid: FC<NodeProps> = ({ children, hasChildren, columns }) => (
   <section className="uib-section" aria-label="Products"><Inner>
-    {hasChildren ? children : <Grid cols={3}>{repeat(6).map((i) => <ProductCard key={i} node={{ id: `p${i}`, semantic_type: "product_card", implementation: "ProductCard", props: {}, tokens: {}, layout: null, animation: null, children: [] }} children={null} hasChildren={false} />)}</Grid>}
+    <Grid cols={columns} fallback={3}>{hasChildren ? children : repeat(6).map((i) => <ProductCard key={i} node={{ id: `p${i}`, semantic_type: "product_card", implementation: "ProductCard", props: {}, tokens: {}, layout: null, animation: null, children: [] }} children={null} hasChildren={false} />)}</Grid>
   </Inner></section>
 );
 
-const ProductDetail: FC<NodeProps> = ({ node }) => (
+const ProductDetail: FC<NodeProps> = ({ node, tracks }) => (
   <section className="uib-section" aria-label="Product detail"><Inner>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--spacing-xl)", alignItems: "start" }}>
+    <Split tracks={tracks} start>
       <div style={{ display: "grid", gap: "var(--spacing-sm)" }}>
         <Placeholder ratio="1/1" label="product photo" />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "var(--spacing-sm)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: "var(--spacing-sm)" }}>
           {repeat(4).map((i) => <Placeholder key={i} ratio="1/1" label={`view ${i + 1}`} />)}</div>
       </div>
       <div style={{ display: "grid", gap: "var(--spacing-md)" }}>
@@ -222,19 +242,19 @@ const ProductDetail: FC<NodeProps> = ({ node }) => (
         </fieldset>
         <Btn>Add to cart</Btn>
         <p className="uib-muted" style={{ fontSize: ".875rem" }}>Free shipping over $75 · 30-day returns</p>
-      </div></div></Inner></section>
+      </div></Split></Inner></section>
 );
 
-const TrustSignals: FC<NodeProps> = () => (
+const TrustSignals: FC<NodeProps> = ({ columns }) => (
   <section className="uib-section" style={{ paddingBlock: "var(--spacing-lg)" }} aria-label="Trust"><Inner>
-    <Grid cols={4}>{[["Free shipping", "On orders over $75"], ["30-day returns", "No questions asked"], ["2-year warranty", "Covered by Acme"], ["Secure checkout", "Encrypted payments"]].map(([t, s]) => (
+    <Grid cols={columns} fallback={4}>{[["Free shipping", "On orders over $75"], ["30-day returns", "No questions asked"], ["2-year warranty", "Covered by Acme"], ["Secure checkout", "Encrypted payments"]].map(([t, s]) => (
       <div key={t}><strong>{t}</strong><p className="uib-muted" style={{ fontSize: ".875rem" }}>{s}</p></div>))}</Grid></Inner></section>
 );
 
 const Reviews: FC<NodeProps> = () => (
   <section className="uib-section" aria-label="Reviews"><Inner>
     <h2 style={{ marginBottom: "var(--spacing-lg)" }}>Reviews</h2>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "var(--spacing-xl)" }}>
+    <div className="uib-aside">
       <div><p style={{ fontSize: "3rem", fontWeight: 700 }}>4.6</p><p className="uib-muted">Based on 218 reviews</p>
         {[5, 4, 3, 2, 1].map((s) => (<div key={s} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6 }}>
           <span className="uib-muted" style={{ width: 12 }}>{s}</span>
@@ -247,17 +267,17 @@ const Reviews: FC<NodeProps> = () => (
     </div></Inner></section>
 );
 
-const RelatedProducts: FC<NodeProps> = ({ children, hasChildren }) => (
+const RelatedProducts: FC<NodeProps> = ({ children, hasChildren, columns }) => (
   <section className="uib-section" aria-label="Related products"><Inner>
     <h2 style={{ marginBottom: "var(--spacing-lg)" }}>You might also like</h2>
-    {hasChildren ? children : <Grid cols={4}>{repeat(4).map((i) => <ProductCard key={i} node={{ id: `r${i}`, semantic_type: "product_card", implementation: "ProductCard", props: {}, tokens: {}, layout: null, animation: null, children: [] }} children={null} hasChildren={false} />)}</Grid>}
+    <Grid cols={columns} fallback={4}>{hasChildren ? children : repeat(4).map((i) => <ProductCard key={i} node={{ id: `r${i}`, semantic_type: "product_card", implementation: "ProductCard", props: {}, tokens: {}, layout: null, animation: null, children: [] }} children={null} hasChildren={false} />)}</Grid>
   </Inner></section>
 );
 
 /* ---------------------------------------------------------------- data */
-const Stats: FC<NodeProps> = () => (
+const Stats: FC<NodeProps> = ({ columns }) => (
   <section aria-label="Key metrics" style={{ padding: "0 var(--spacing-lg)" }}>
-    <Grid cols={4}>{[["Revenue", "$48,210", "+12.4%"], ["Active users", "8,942", "+3.1%"], ["Churn", "1.8%", "-0.4%"], ["NPS", "62", "+5"]].map(([l, v, d]) => (
+    <Grid cols={columns} fallback={4}>{[["Revenue", "$48,210", "+12.4%"], ["Active users", "8,942", "+3.1%"], ["Churn", "1.8%", "-0.4%"], ["NPS", "62", "+5"]].map(([l, v, d]) => (
       <div key={l} className="uib-card"><p className="uib-muted" style={{ fontSize: ".875rem" }}>{l}</p>
         <p style={{ fontSize: "1.75rem", fontWeight: 700, margin: "4px 0" }}>{v}</p>
         <p style={{ fontSize: ".875rem", color: String(d).startsWith("-") ? "var(--color-muted)" : "var(--color-accent,var(--color-primary))" }}>{d} vs last month</p></div>))}</Grid>
@@ -281,8 +301,8 @@ const ChartPanel: FC<NodeProps> = ({ node }) => {
 
 const DataTable: FC<NodeProps> = () => (
   <section aria-label="Records" style={{ padding: "0 var(--spacing-lg)" }}>
-    <div className="uib-card" style={{ padding: 0, overflow: "hidden" }}>
-      <table><thead><tr>{["Customer", "Plan", "MRR", "Status"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+    <div className="uib-card uib-scroll-x" style={{ padding: 0 }}>
+      <table style={{ minWidth: 520 }}><thead><tr>{["Customer", "Plan", "MRR", "Status"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
         <tbody>{[["Northwind", "Scale", "$1,990", "Active"], ["Contoso", "Team", "$490", "Active"], ["Globex", "Team", "$490", "Trial"], ["Initech", "Starter", "$0", "Churned"], ["Umbrella", "Scale", "$1,990", "Active"]].map((r) => (
           <tr key={r[0]}>{r.map((c) => <td key={c}>{c}</td>)}</tr>))}</tbody></table></div></section>
 );

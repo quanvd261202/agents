@@ -17,8 +17,10 @@
   if (document.documentElement.scrollWidth > docW + 1)
     add("critical", "layout", "page", `page scrolls horizontally (${document.documentElement.scrollWidth}px > ${docW}px)`,
         "reduce columns or allow the layout to collapse at this breakpoint", { scrollWidth: document.documentElement.scrollWidth, clientWidth: docW });
+  const transformed = (el) => { let n = el; while (n && n !== document.documentElement) {
+      if (getComputedStyle(n).transform !== "none") return true; n = n.parentElement; } return false; };
   for (const el of document.querySelectorAll("[data-node]")) {
-    if (!visible(el)) continue;
+    if (!visible(el) || transformed(el)) continue;
     const r = el.getBoundingClientRect();
     if (r.right > docW + 1 || r.left < -1)
       add("critical", "layout", nodeId(el), `element extends outside the viewport (left ${Math.round(r.left)}px, right ${Math.round(r.right)}px)`,
@@ -33,7 +35,20 @@
       add("major", "layout", nodeId(el), `text is clipped in <${el.tagName.toLowerCase()}>`, "increase the container height or reduce the text", {});
   }
 
-  /* 4. contrast (WCAG 2.1 AA) for visible text */
+  /* 4. grid tracks too narrow for the content they hold. Columns that do not overflow can still
+        be unusable: minmax(0,1fr) happily shrinks a card to 45px and simply wraps the text. */
+  const MIN_TRACK = 150;
+  for (const el of document.querySelectorAll("[data-node], .uib-grid")) {
+    if (!visible(el) || getComputedStyle(el).display !== "grid") continue;
+    const tracks = getComputedStyle(el).gridTemplateColumns.split(" ").map(parseFloat).filter((n) => !isNaN(n));
+    if (tracks.length < 2 || !el.textContent.trim()) continue;
+    const min = Math.min(...tracks);
+    if (min < MIN_TRACK)
+      add("critical", "layout", nodeId(el), `grid columns are ${Math.round(min)}px wide, too narrow for their content`,
+          `reduce the column count at this breakpoint (currently ${tracks.length})`, { columns: tracks.length, trackWidth: min });
+  }
+
+  /* 5. contrast (WCAG 2.1 AA) for visible text */
   const parse = (c) => { const m = c.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number).concat(m[3] !== undefined ? Number(m[3]) : 1) : null; };
   const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
     return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
@@ -57,16 +72,20 @@
     }
   }
 
-  /* 5. interactive target size (WCAG 2.5.8, 24x24 CSS px) */
+  /* 6. interactive target size (WCAG 2.5.8, 24x24 CSS px).
+        Exceptions: a control wrapped in a large-enough label, and inline links inside running text. */
   for (const el of document.querySelectorAll("button, a, input, select, summary, [role=button]")) {
     if (!visible(el)) continue;
     const r = el.getBoundingClientRect();
+    const label = el.closest("label");
+    if (label && label !== el) { const lr = label.getBoundingClientRect(); if (lr.width >= 24 && lr.height >= 24) continue; }
+    if (el.tagName === "A" && getComputedStyle(el).display === "inline") continue;
     if (r.width < 24 || r.height < 24)
       add("major", "accessibility", nodeId(el), `interactive target is ${Math.round(r.width)}x${Math.round(r.height)}px, below 24x24`,
           "increase padding or min-height on this control", { width: r.width, height: r.height });
   }
 
-  /* 6. accessible names and heading order */
+  /* 7. accessible names and heading order */
   for (const el of document.querySelectorAll("button, a[href]")) {
     if (!visible(el)) continue;
     const name = (el.getAttribute("aria-label") || el.textContent || "").trim();
@@ -78,7 +97,7 @@
   if (h1s.length === 0) add("major", "ux", "page", "the screen has no level-1 heading", "give the primary section a headline", {});
   if (h1s.length > 1) add("minor", "visual", "page", `the screen has ${h1s.length} level-1 headings`, "demote secondary headings to h2", {});
 
-  /* 7. empty sections */
+  /* 8. empty sections */
   for (const el of document.querySelectorAll("[data-node]")) {
     if (!visible(el)) continue;
     if (el.getBoundingClientRect().height < 8 && !el.querySelector("[data-node]"))

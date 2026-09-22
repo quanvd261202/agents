@@ -67,3 +67,7 @@ def dump_spec(
         raise typer.BadParameter(f"unknown fixture '{name}'; choose from {list(ALL)}")
     out.write_text(json.dumps(ALL[name], indent=2))
     typer.echo(f"wrote {out}")
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main()

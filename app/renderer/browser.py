@@ -20,10 +20,24 @@ log = get_logger(__name__)
 
 CHECKS_JS = (Path(__file__).parent / "checks.js").read_text()
 _DISPATCH_JS = "model => window.dispatchEvent(new CustomEvent('uib:model', {detail: model}))"
+
+# Scroll-triggered entrance animations start at opacity 0. A full-page screenshot taken without
+# scrolling first would capture blank sections, so walk the page once and return to the top.
+_SETTLE_JS = """
+async () => {
+  const step = Math.round(window.innerHeight * 0.75);
+  for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+    window.scrollTo(0, y);
+    await new Promise((r) => setTimeout(r, 90));
+  }
+  window.scrollTo(0, 0);
+  await new Promise((r) => setTimeout(r, 250));
+}
+"""
 VIEWPORTS: dict[Breakpoint, tuple[int, int]] = {
     Breakpoint.mobile: (390, 844),
     Breakpoint.tablet: (820, 1180),
-    Breakpoint.desktop: (1440, 900),
+    Breakpoint.desktop: (1280, 900),
     Breakpoint.wide: (1920, 1080),
 }
 
@@ -110,6 +124,7 @@ class PlaywrightRenderer:
                 await page.evaluate(_DISPATCH_JS, payload)
                 await page.wait_for_function("window.__uibReady === true", timeout=15_000)
                 await page.evaluate("document.fonts ? document.fonts.ready : true")
+                await page.evaluate(_SETTLE_JS)
                 raw = await page.evaluate(CHECKS_JS)
                 outline[bp] = raw["outline"]
                 findings.extend(self._to_issues(raw["findings"], bp))
