@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.models.common import Breakpoint, StrictModel
 
@@ -67,6 +67,16 @@ class ComponentDefinition(StrictModel):
     implementation: ImplementationMapping
     animation_capabilities: list[str] = Field(default_factory=lambda: ["fade", "fade_up"])
     design_metadata: DesignMetadata = Field(default_factory=DesignMetadata)
+
+    @model_validator(mode="after")
+    def _default_variant_in_variants(self) -> ComponentDefinition:
+        if self.default_variant not in self.variants:
+            if "default_variant" in self.model_fields_set:
+                raise ValueError(
+                    f"{self.id}: default_variant '{self.default_variant}' not in variants"
+                )
+            object.__setattr__(self, "default_variant", self.variants[0])
+        return self
 
     def supports_domain(self, domain: str) -> bool:
         return "*" in self.supported_domains or domain in self.supported_domains

@@ -1,5 +1,11 @@
 """Seed semantic component catalog. Implementation mappings live here, never in agents."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.catalog.registry import ComponentRegistry
+
+
 from app.catalog.models import (
     ComponentCategory as C,
 )
@@ -401,7 +407,7 @@ COMPONENTS: list[ComponentDefinition] = [
 ]
 
 
-def default_component_registry():  # type: ignore[no-untyped-def]
+def default_component_registry() -> "ComponentRegistry":
     from app.catalog.registry import ComponentRegistry
 
     return ComponentRegistry(COMPONENTS)

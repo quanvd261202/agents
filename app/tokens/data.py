@@ -1,5 +1,11 @@
 """Seed themes. Spacing tokens are stored as unitless px bases and scaled by density."""
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.tokens.registry import ThemeRegistry
+
+
 from app.tokens.models import ResponsiveValue as R
 from app.tokens.models import Theme
 from app.tokens.models import TokenCategory as T
@@ -208,7 +214,7 @@ THEMES: list[Theme] = [
 ]
 
 
-def default_theme_registry():  # type: ignore[no-untyped-def]
+def default_theme_registry() -> "ThemeRegistry":
     from app.tokens.registry import ThemeRegistry
 
     return ThemeRegistry(THEMES)
