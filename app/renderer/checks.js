@@ -91,8 +91,20 @@
     const name = (el.getAttribute("aria-label") || el.textContent || "").trim();
     if (!name) add("major", "accessibility", nodeId(el), `<${el.tagName.toLowerCase()}> has no accessible name`, "add visible text or an aria-label", {});
   }
-  for (const el of document.querySelectorAll("img:not([alt]), input:not([id]):not([aria-label])"))
-    if (visible(el)) add("minor", "accessibility", nodeId(el), `<${el.tagName.toLowerCase()}> is missing a label or alt text`, "add alt text or an associated label", {});
+  // A form control is named by aria-*, a wrapping <label> (implicit), or a <label for=id>.
+  const NO_LABEL_NEEDED = new Set(["hidden", "submit", "button", "image", "reset"]);
+  const labelled = (el) => {
+    if (el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || el.title) return true;
+    if (NO_LABEL_NEEDED.has(el.type)) return true;
+    if (el.closest("label")) return true;
+    const id = el.getAttribute("id");
+    return !!(id && document.querySelector(`label[for="${CSS.escape(id)}"]`));
+  };
+  for (const el of document.querySelectorAll("img:not([alt])"))
+    if (visible(el)) add("minor", "accessibility", nodeId(el), "<img> is missing alt text", "add alt text, or alt=\"\" if decorative", {});
+  for (const el of document.querySelectorAll("input, select, textarea"))
+    if (visible(el) && !labelled(el))
+      add("minor", "accessibility", nodeId(el), `<${el.tagName.toLowerCase()}> has no associated label`, "wrap it in a <label>, point a <label for> at it, or add an aria-label", {});
   const h1s = [...document.querySelectorAll("h1")].filter(visible);
   if (h1s.length === 0) add("major", "ux", "page", "the screen has no level-1 heading", "give the primary section a headline", {});
   if (h1s.length > 1) add("minor", "visual", "page", `the screen has ${h1s.length} level-1 headings`, "demote secondary headings to h2", {});

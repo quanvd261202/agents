@@ -183,7 +183,9 @@ class PgVectorRetrievalRepository:
                     "SELECT id, kind, summary, text, metadata, "
                     "1 - (embedding <=> CAST(:embedding AS vector)) AS score "
                     f"FROM retrieval_documents{clause} "
-                    "ORDER BY embedding <=> CAST(:embedding AS vector) LIMIT :limit"
+                    # `id` breaks score ties the same way the in-memory store does, so the two
+                    # backends agree and repeated runs are reproducible.
+                    "ORDER BY embedding <=> CAST(:embedding AS vector), id LIMIT :limit"
                 ),
                 params,
             )

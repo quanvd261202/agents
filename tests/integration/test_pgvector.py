@@ -89,3 +89,54 @@ async def test_upsert_is_idempotent(service):
     before = await service._repository.count()
     await RetrievalIndex(service._embeddings, service._repository).rebuild()
     assert await service._repository.count() == before
+
+
+PARITY_CASES = [
+    ("premium saas analytics dashboard charts", RetrievalFilters(kinds=[RetrievalKind.component])),
+    ("running shoe store", RetrievalFilters(kinds=[RetrievalKind.component], domain="ecommerce")),
+    ("product grid", RetrievalFilters(kinds=[RetrievalKind.component], domain="saas")),
+    ("trust badges", RetrievalFilters(any_capabilities=["trust"])),
+    ("responsive commerce grid", RetrievalFilters(all_capabilities=["commerce", "responsive"])),
+    ("hero", RetrievalFilters(exclude_ids=["hero"])),
+    ("card layout", RetrievalFilters(kinds=[RetrievalKind.layout])),
+    ("premium page", RetrievalFilters(category="commerce")),
+    ("editorial landing", RetrievalFilters(kinds=[RetrievalKind.recipe], domain="saas")),
+    ("bento feature grid", RetrievalFilters(layout="bento")),
+    ("premium hero", RetrievalFilters(style="premium")),
+]
+
+
+@pytest.fixture
+async def in_memory_service():
+    from app.retrieval import InMemoryRetrievalRepository
+
+    embeddings = HashingEmbeddingProvider(dimensions=DIMS)
+    repo = InMemoryRetrievalRepository()
+    await RetrievalIndex(embeddings, repo).rebuild()
+    return RetrievalService(embeddings, repo)
+
+
+@pytest.mark.parametrize("query,filters", PARITY_CASES, ids=[c[0] for c in PARITY_CASES])
+async def test_pgvector_matches_in_memory_exactly(service, in_memory_service, query, filters):
+    """Both backends must return the same documents in the same order.
+
+    Ordering matters: most queries leave many documents tied at a score of zero, and without a
+    deterministic tie-break SQL returns them in physical order while the in-memory store sorts
+    by id. That divergence made the same request produce different context per backend.
+    """
+    pg = await service.search(query, filters, limit=8)
+    mem = await in_memory_service.search(query, filters, limit=8)
+    assert [h.document.id for h in pg] == [h.document.id for h in mem]
+    assert pg, "query returned nothing, so this comparison would be vacuous"
+    by_id = {h.document.id: h.score for h in mem}
+    for hit in pg:
+        assert hit.score == pytest.approx(by_id[hit.document.id], abs=1e-5)
+
+
+async def test_results_are_stable_across_repeated_queries(service):
+    first = await service.search("card layout", RetrievalFilters(kinds=[RetrievalKind.layout]), 8)
+    for _ in range(3):
+        again = await service.search(
+            "card layout", RetrievalFilters(kinds=[RetrievalKind.layout]), 8
+        )
+        assert [h.document.id for h in again] == [h.document.id for h in first]
