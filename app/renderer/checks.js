@@ -1,0 +1,97 @@
+/* Deterministic DOM checks. Runs in page; returns findings the verifier treats as authoritative. */
+(() => {
+  const out = [];
+  const add = (severity, dimension, target, issue, suggestion, data) =>
+    out.push({ severity, dimension, target, issue, suggestion, data: data || {} });
+
+  const nodeId = (el) => { const n = el.closest("[data-node]"); return n ? n.getAttribute("data-node") : "page"; };
+  const visible = (el) => { const s = getComputedStyle(el); const r = el.getBoundingClientRect();
+    return s.display !== "none" && s.visibility !== "hidden" && s.opacity !== "0" && r.width > 0 && r.height > 0; };
+
+  /* 1. render errors reported by the React boundary */
+  for (const e of (window.__uibErrors || []))
+    add("critical", "layout", e.node, `component failed to render: ${e.message}`, `fix or replace ${e.implementation}`, e);
+
+  /* 2. horizontal overflow of the document and of individual elements */
+  const docW = document.documentElement.clientWidth;
+  if (document.documentElement.scrollWidth > docW + 1)
+    add("critical", "layout", "page", `page scrolls horizontally (${document.documentElement.scrollWidth}px > ${docW}px)`,
+        "reduce columns or allow the layout to collapse at this breakpoint", { scrollWidth: document.documentElement.scrollWidth, clientWidth: docW });
+  for (const el of document.querySelectorAll("[data-node]")) {
+    if (!visible(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.right > docW + 1 || r.left < -1)
+      add("critical", "layout", nodeId(el), `element extends outside the viewport (left ${Math.round(r.left)}px, right ${Math.round(r.right)}px)`,
+          "reduce columns or switch to a stacked layout at this breakpoint", { left: r.left, right: r.right });
+  }
+
+  /* 3. clipped text: content taller/wider than its scroll container */
+  for (const el of document.querySelectorAll("p, h1, h2, h3, td, th, li, button, a, summary")) {
+    if (!visible(el)) continue;
+    const s = getComputedStyle(el);
+    if (s.overflow !== "visible" && el.scrollHeight > el.clientHeight + 2 && s.overflowY !== "auto" && s.overflowY !== "scroll")
+      add("major", "layout", nodeId(el), `text is clipped in <${el.tagName.toLowerCase()}>`, "increase the container height or reduce the text", {});
+  }
+
+  /* 4. contrast (WCAG 2.1 AA) for visible text */
+  const parse = (c) => { const m = c.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number).concat(m[3] !== undefined ? Number(m[3]) : 1) : null; };
+  const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const bgOf = (el) => { let n = el; while (n && n !== document.documentElement) {
+      const c = parse(getComputedStyle(n).backgroundColor); if (c && c[3] > 0.5) return c; n = n.parentElement; }
+    return parse(getComputedStyle(document.body).backgroundColor) || [255, 255, 255, 1]; };
+  const seen = new Set();
+  for (const el of document.querySelectorAll("p, h1, h2, h3, span, a, button, td, th, li, strong, label, summary, legend")) {
+    if (!visible(el) || !el.textContent.trim()) continue;
+    if ([...el.children].some((c) => c.textContent.trim() === el.textContent.trim())) continue;
+    const s = getComputedStyle(el), fg = parse(s.color), bg = bgOf(el);
+    if (!fg || !bg) continue;
+    const L1 = lum(fg), L2 = lum(bg), ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+    const size = parseFloat(s.fontSize), bold = parseInt(s.fontWeight, 10) >= 700;
+    const required = size >= 24 || (size >= 18.66 && bold) ? 3 : 4.5;
+    if (ratio < required) {
+      const key = nodeId(el) + "|" + s.color + "|" + Math.round(size);
+      if (seen.has(key)) continue; seen.add(key);
+      add("major", "accessibility", nodeId(el), `text contrast ${ratio.toFixed(2)}:1 is below the ${required}:1 minimum`,
+          "use a darker foreground token or a lighter surface token", { ratio: +ratio.toFixed(2), required, fontSize: size });
+    }
+  }
+
+  /* 5. interactive target size (WCAG 2.5.8, 24x24 CSS px) */
+  for (const el of document.querySelectorAll("button, a, input, select, summary, [role=button]")) {
+    if (!visible(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 24 || r.height < 24)
+      add("major", "accessibility", nodeId(el), `interactive target is ${Math.round(r.width)}x${Math.round(r.height)}px, below 24x24`,
+          "increase padding or min-height on this control", { width: r.width, height: r.height });
+  }
+
+  /* 6. accessible names and heading order */
+  for (const el of document.querySelectorAll("button, a[href]")) {
+    if (!visible(el)) continue;
+    const name = (el.getAttribute("aria-label") || el.textContent || "").trim();
+    if (!name) add("major", "accessibility", nodeId(el), `<${el.tagName.toLowerCase()}> has no accessible name`, "add visible text or an aria-label", {});
+  }
+  for (const el of document.querySelectorAll("img:not([alt]), input:not([id]):not([aria-label])"))
+    if (visible(el)) add("minor", "accessibility", nodeId(el), `<${el.tagName.toLowerCase()}> is missing a label or alt text`, "add alt text or an associated label", {});
+  const h1s = [...document.querySelectorAll("h1")].filter(visible);
+  if (h1s.length === 0) add("major", "ux", "page", "the screen has no level-1 heading", "give the primary section a headline", {});
+  if (h1s.length > 1) add("minor", "visual", "page", `the screen has ${h1s.length} level-1 headings`, "demote secondary headings to h2", {});
+
+  /* 7. empty sections */
+  for (const el of document.querySelectorAll("[data-node]")) {
+    if (!visible(el)) continue;
+    if (el.getBoundingClientRect().height < 8 && !el.querySelector("[data-node]"))
+      add("major", "layout", nodeId(el), "section renders with almost no height", "check that the component received content", {});
+  }
+
+  return {
+    findings: out,
+    outline: [...document.querySelectorAll("[data-node]")].filter(visible).map((el) => {
+      const r = el.getBoundingClientRect();
+      return { id: el.getAttribute("data-node"), semantic: el.getAttribute("data-semantic") || "",
+               top: Math.round(r.top + window.scrollY), height: Math.round(r.height), width: Math.round(r.width) };
+    }),
+    documentHeight: document.documentElement.scrollHeight,
+  };
+})();

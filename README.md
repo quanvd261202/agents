@@ -6,8 +6,9 @@ See `agentic-ui-builder-phase-prompts.md` for the full phase spec.
 
 ## Status
 
-Phases 01-05 and 12 complete: foundation plus all static registries (components, themes/tokens,
-layout grammar, recipes, animation). Deterministic resolver (Phase 11) and renderer (Phase 13) are next.
+Phases 01-05 and 11-13 complete: foundation, all static registries, the deterministic resolver
+(`DesignSpec` -> `RenderModel`) and the browser renderer with deterministic screenshot checks.
+Agents (Phases 07-10, 14-15), retrieval (06) and learning (16) are next.
 
 ## Layout
 
@@ -23,8 +24,8 @@ app/
   layout/     Phase 04 layout grammar: LayoutSpec, nesting/ratio/column validation, responsive resolver
   recipes/    Phase 05 page recipes, RecipeValidator (required sections, reorder groups), RecipeResolver
   animation/  Phase 12 animation vocabulary, intensity presets, MotionAnimationEngine, reduced motion
-  dsl/        Phase 11 deterministic resolver (DesignSpec -> RenderModel)
-  renderer/   Phase 13 renderer
+  dsl/        Phase 11 deterministic resolver (DesignSpec -> RenderModel), no LLM
+  renderer/   Phase 13 static server, Playwright driver, deterministic DOM checks (checks.js)
   retrieval/  Phase 06 pgvector retrieval
   verifier/   Phase 14 deterministic checks
   learning/   Phase 16 lessons
@@ -35,6 +36,17 @@ Rules enforced by `import-linter`: `app.dsl`, `app.layout`, `app.animation`, `ap
 
 All registries share `app.core.registry.BaseRegistry` (register/get/exists/list/filter, duplicate-id guard).
 
+## Frontend renderer
+
+`frontend/` is a Vite + React + Motion app. It is a pure function of the `RenderModel`: a tree walker
+maps each node's `implementation` name to a React component and applies resolved layout, tokens and
+Motion config. Unknown implementations surface as structured errors, never as silent fallback UI.
+
+```bash
+npm --prefix frontend install
+npm --prefix frontend run build     # produces frontend/dist, served by app.renderer.StaticServer
+```
+
 ## Setup
 
 ```bash
@@ -42,8 +54,17 @@ uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 docker compose up -d
 cp .env.example .env
-pytest
+playwright install chromium
+pytest                    # unit tests only when the bundle or playwright is missing
+pytest -m integration     # renders every recipe in a real browser
 lint-imports
+```
+
+Render a Design DSL file without any LLM:
+
+```bash
+uib dump-spec ecommerce_product --out spec.json
+uib render spec.json --out screenshots
 ```
 
 ## Graph
