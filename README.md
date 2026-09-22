@@ -6,7 +6,8 @@ See `agentic-ui-builder-phase-prompts.md` for the full phase spec.
 
 ## Status
 
-Phase 01 (Foundation) complete. Services are interfaces only; the graph runs against stubs in tests.
+Phases 01-05 and 12 complete: foundation plus all static registries (components, themes/tokens,
+layout grammar, recipes, animation). Deterministic resolver (Phase 11) and renderer (Phase 13) are next.
 
 ## Layout
 
@@ -17,18 +18,22 @@ app/
   services/   service + repository Protocols, DI container (Services)
   graph/      AgentState, thin LangGraph nodes, graph builder with conditional routing
   agents/     Phase 07-10, 14, 15 (LLM agents)
-  catalog/    Phase 02 component registry
-  dsl/        Phase 11 deterministic resolver
-  layout/     Phase 04 layout grammar
-  animation/  Phase 12 animation engine
+  catalog/    Phase 02 semantic component registry + implementation mappings (data/components.py)
+  tokens/     Phase 03 themes with inheritance, TokenResolver (intent -> CSS variables)
+  layout/     Phase 04 layout grammar: LayoutSpec, nesting/ratio/column validation, responsive resolver
+  recipes/    Phase 05 page recipes, RecipeValidator (required sections, reorder groups), RecipeResolver
+  animation/  Phase 12 animation vocabulary, intensity presets, MotionAnimationEngine, reduced motion
+  dsl/        Phase 11 deterministic resolver (DesignSpec -> RenderModel)
   renderer/   Phase 13 renderer
   retrieval/  Phase 06 pgvector retrieval
   verifier/   Phase 14 deterministic checks
   learning/   Phase 16 lessons
 ```
 
-Rules enforced by `import-linter`: `app.dsl`, `app.layout`, `app.animation`, `app.catalog`,
-`app.renderer` may never import the LLM layer.
+Rules enforced by `import-linter`: `app.dsl`, `app.layout`, `app.animation`, `app.catalog`, `app.tokens`,
+`app.recipes`, `app.renderer` may never import the LLM layer.
+
+All registries share `app.core.registry.BaseRegistry` (register/get/exists/list/filter, duplicate-id guard).
 
 ## Setup
 
