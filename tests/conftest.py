@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 import pytest
 
 from app.core.config import Settings
@@ -21,15 +19,8 @@ from app.models import (
     UXPlan,
     VerificationResult,
 )
+from app.retrieval.models import RetrievedContext
 from app.services.container import Services
-
-
-@dataclass
-class Ctx:
-    components: list[str] = field(default_factory=lambda: ["hero", "cta"])
-    layouts: list[str] = field(default_factory=lambda: ["stack"])
-    lessons: list[str] = field(default_factory=list)
-
 
 REQ = ClarifiedRequirements(
     product="shoe store", domain="ecommerce", target_audience="general", primary_goal="sell shoes"
@@ -77,9 +68,11 @@ class StubServices:
             recipe="saas_landing",
         )
 
-    async def retrieve(self, req, direction):
+    async def retrieve(self, req, direction, lessons=None):
         self.calls.append("retrieve")
-        return Ctx()
+        return RetrievedContext(
+            components=["hero", "cta"], layouts=["stack"], recipes=["saas_landing"]
+        )
 
     async def build(self, req, plan, direction, ctx):
         self.calls.append("build")

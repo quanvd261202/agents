@@ -13,7 +13,7 @@ class _NotWired:
 
 
 def build_services(settings: Settings) -> Services:  # noqa: D103
-    llm = build_llm_provider(settings.llm_provider, settings.llm_model)
+    llm = build_llm_provider(settings.llm_provider, settings.llm_model, settings.llm_base_url)
     nw: Any = _NotWired()
     return Services(
         settings=settings,

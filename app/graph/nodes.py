@@ -40,18 +40,16 @@ def make_nodes(svc: Services) -> dict[str, Node]:
         ctx = await svc.retrieval.retrieve(
             _require(state, "clarified_requirements"), _require(state, "design_direction")
         )
-        return {
-            "retrieved_context": {
-                "components": ctx.components,
-                "layouts": ctx.layouts,
-                "lessons": ctx.lessons,
-            }
-        }
+        log.info(
+            "retrieval.context",
+            components=len(ctx.components),
+            layouts=len(ctx.layouts),
+            tokens=ctx.estimated_tokens,
+        )
+        return {"retrieved_context": ctx}
 
     async def design_builder(state: AgentState) -> dict[str, Any]:
-        ctx = await svc.retrieval.retrieve(
-            _require(state, "clarified_requirements"), _require(state, "design_direction")
-        )
+        ctx = _require(state, "retrieved_context")
         spec = await svc.builder.build(
             _require(state, "clarified_requirements"),
             _require(state, "ux_plan"),

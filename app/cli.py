@@ -69,5 +69,58 @@ def dump_spec(
     typer.echo(f"wrote {out}")
 
 
+@cli.command()
+def retrieve(
+    product: str = typer.Argument(..., help="What is being built"),
+    domain: str = typer.Option("saas", help="Product domain, e.g. ecommerce or saas"),
+    style: str = typer.Option("premium_modern", help="Visual style from the design direction"),
+    recipe: str = typer.Option("saas_landing", help="Recipe the director chose"),
+    pg: bool = typer.Option(False, "--pg", help="Use pgvector instead of the in-memory index"),
+) -> None:
+    """Show the compact context retrieval would hand the Design Builder."""
+    from app.models.direction import DesignDirection
+    from app.models.requirements import ClarifiedRequirements
+    from app.retrieval import PgVectorRetrievalRepository, build_retrieval_service
+
+    settings = get_settings()
+    configure_logging(settings.log_level)
+
+    async def run() -> None:
+        repository = None
+        if pg:
+            from app.db import build_session_factory
+
+            repository = PgVectorRetrievalRepository(
+                build_session_factory(settings.database_url), settings.embedding_dimensions
+            )
+            await repository.create_schema()
+        service = await build_retrieval_service(settings, repository)
+        ctx = await service.retrieve(
+            ClarifiedRequirements(
+                product=product, domain=domain, target_audience="general", primary_goal=product
+            ),
+            DesignDirection(
+                visual_style=style,
+                theme="modern_light",
+                typography="modern_sans",
+                radius="large",
+                layout_strategy="grid",
+                animation="subtle",
+                recipe=recipe,
+            ),
+        )
+        for label, lines in (
+            ("recipes", ctx.recipes),
+            ("components", ctx.components),
+            ("layouts", ctx.layouts),
+        ):
+            typer.echo(f"\n{label}:")
+            for line in lines:
+                typer.echo(f"  {line}")
+        typer.echo(f"\n~{ctx.estimated_tokens} tokens of context")
+
+    asyncio.run(run())
+
+
 if __name__ == "__main__":  # pragma: no cover
     main()

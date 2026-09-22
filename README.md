@@ -6,9 +6,13 @@ See `agentic-ui-builder-phase-prompts.md` for the full phase spec.
 
 ## Status
 
-Phases 01-05 and 11-13 complete: foundation, all static registries, the deterministic resolver
-(`DesignSpec` -> `RenderModel`) and the browser renderer with deterministic screenshot checks.
-Agents (Phases 07-10, 14-15), retrieval (06) and learning (16) are next.
+Phases 01-06 and 11-13 complete: foundation, all static registries, the deterministic resolver
+(`DesignSpec` -> `RenderModel`), the browser renderer with deterministic screenshot checks, and
+retrieval. Agents (Phases 07-10, 14-15) and learning (16) are next.
+
+**Providers.** OpenAI is the default for both chat and embeddings; Anthropic is also wired.
+Set `UIB_LLM_PROVIDER` / `UIB_EMBEDDING_PROVIDER`. Leaving `UIB_LLM_MODEL` empty takes the
+provider default. `UIB_EMBEDDING_PROVIDER=hashing` runs retrieval offline with no API key.
 
 ## Layout
 
@@ -26,7 +30,9 @@ app/
   animation/  Phase 12 animation vocabulary, intensity presets, MotionAnimationEngine, reduced motion
   dsl/        Phase 11 deterministic resolver (DesignSpec -> RenderModel), no LLM
   renderer/   Phase 13 static server, Playwright driver, deterministic DOM checks (checks.js)
-  retrieval/  Phase 06 pgvector retrieval
+  retrieval/  Phase 06 embeddings (OpenAI + offline hashing), in-memory and pgvector stores,
+              registry indexer, filtered search, context budget
+  db/         async SQLAlchemy engine and session factory
   verifier/   Phase 14 deterministic checks
   learning/   Phase 16 lessons
 ```
@@ -65,6 +71,13 @@ playwright install chromium
 pytest                    # unit tests only when the bundle or playwright is missing
 pytest -m integration     # renders every recipe in a real browser
 lint-imports
+```
+
+Inspect what retrieval would send the design agent (no API key needed with the hashing provider):
+
+```bash
+UIB_EMBEDDING_PROVIDER=hashing uib retrieve "running shoe store" --domain ecommerce
+uib retrieve "premium analytics dashboard" --domain saas --recipe dashboard --pg
 ```
 
 Render a Design DSL file without any LLM:

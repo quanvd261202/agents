@@ -15,12 +15,7 @@ from app.models import (
     UXPlan,
     VerificationResult,
 )
-
-
-class RetrievedContext(TypedDict, total=False):
-    components: list[str]
-    layouts: list[str]
-    lessons: list[str]
+from app.retrieval.models import RetrievedContext
 
 
 class AgentState(TypedDict, total=False):

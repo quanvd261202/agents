@@ -13,6 +13,7 @@ from app.models import (
     UXPlan,
     VerificationResult,
 )
+from app.retrieval.models import RetrievedContext
 
 
 class ClarifierService(Protocol):
@@ -27,16 +28,13 @@ class DesignDirectorService(Protocol):
     async def direct(self, req: ClarifiedRequirements, plan: UXPlan) -> DesignDirection: ...
 
 
-class RetrievalContext(Protocol):
-    components: list[str]
-    layouts: list[str]
-    lessons: list[str]
-
-
 class RetrievalService(Protocol):
     async def retrieve(
-        self, req: ClarifiedRequirements, direction: DesignDirection
-    ) -> RetrievalContext: ...
+        self,
+        req: ClarifiedRequirements,
+        direction: DesignDirection,
+        lessons: list[str] | None = None,
+    ) -> RetrievedContext: ...
 
 
 class DesignBuilderService(Protocol):
@@ -45,7 +43,7 @@ class DesignBuilderService(Protocol):
         req: ClarifiedRequirements,
         plan: UXPlan,
         direction: DesignDirection,
-        context: RetrievalContext,
+        context: RetrievedContext,
     ) -> DesignSpec: ...
 
 

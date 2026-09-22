@@ -68,6 +68,59 @@ class FakeLLMProvider:
         return LLMResult(value=str(item), usage=LLMUsage(model="fake"))
 
 
+class OpenAILLMProvider:
+    """LangChain-backed OpenAI provider. Imported lazily so tests need no API key."""
+
+    def __init__(self, model: str, temperature: float = 0.2, base_url: str | None = None) -> None:
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError as e:  # pragma: no cover
+            raise ConfigurationError("langchain-openai is not installed") from e
+        self._model_name = model
+        kwargs: dict[str, Any] = {"model": model, "temperature": temperature}
+        if base_url:
+            kwargs["base_url"] = base_url
+        self._chat = ChatOpenAI(**kwargs)
+
+    @staticmethod
+    def _to_lc(messages: Sequence[Message]) -> list[tuple[str, Any]]:
+        return [(m.role, m.content) for m in messages]
+
+    async def invoke_structured(self, messages: Sequence[Message], schema: type[T]) -> LLMResult[T]:
+        import time
+
+        start = time.perf_counter()
+        # `strict` uses OpenAI structured outputs, so the model cannot return an off-schema object.
+        runnable = self._chat.with_structured_output(
+            schema, method="json_schema", strict=True, include_raw=True
+        )
+        out = await runnable.ainvoke(self._to_lc(messages))
+        if not isinstance(out, dict):
+            raise StructuredOutputError("structured output did not return a raw/parsed dict")
+        parsed = out.get("parsed")
+        if parsed is None:
+            raise StructuredOutputError(str(out.get("parsing_error")))
+        return LLMResult(value=parsed, usage=self._usage(out["raw"], start))
+
+    async def invoke_text(self, messages: Sequence[Message]) -> LLMResult[str]:
+        import time
+
+        start = time.perf_counter()
+        out = await self._chat.ainvoke(self._to_lc(messages))
+        return LLMResult(value=str(out.content), usage=self._usage(out, start))
+
+    def _usage(self, raw: Any, start: float) -> LLMUsage:
+        import time
+
+        meta = getattr(raw, "usage_metadata", None) or {}
+        return LLMUsage(
+            input_tokens=meta.get("input_tokens", 0),
+            output_tokens=meta.get("output_tokens", 0),
+            model=self._model_name,
+            latency_ms=(time.perf_counter() - start) * 1000,
+        )
+
+
 class AnthropicLLMProvider:
     """LangChain-backed provider. Imported lazily so tests need no API key."""
 
@@ -119,9 +172,16 @@ class AnthropicLLMProvider:
         return LLMResult(value=str(out.content), usage=usage)
 
 
-def build_llm_provider(provider: str, model: str) -> LLMProvider:
+#: Used when `llm_model` is left empty so one setting can serve every provider.
+DEFAULT_MODELS = {"openai": "gpt-4o", "anthropic": "claude-sonnet-5", "fake": "fake"}
+
+
+def build_llm_provider(provider: str, model: str = "", base_url: str | None = None) -> LLMProvider:
+    chosen = model or DEFAULT_MODELS.get(provider, "")
     if provider == "fake":
         return FakeLLMProvider()
+    if provider == "openai":
+        return OpenAILLMProvider(model=chosen, base_url=base_url)
     if provider == "anthropic":
-        return AnthropicLLMProvider(model=model)
+        return AnthropicLLMProvider(model=chosen)
     raise ConfigurationError(f"Unknown LLM provider: {provider}")
