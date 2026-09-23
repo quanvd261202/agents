@@ -25,14 +25,36 @@ _DISPATCH_JS = "model => window.dispatchEvent(new CustomEvent('uib:model', {deta
 # scrolling first would capture blank sections, so walk the page once and return to the top.
 _SETTLE_JS = """
 async () => {
+  // Two frames guarantee a rendering update, which is when IntersectionObserver reports; a bare
+  // timeout can elapse without one in headless Chrome, leaving an in-view entrance unfired.
+  const frames = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const step = Math.round(window.innerHeight * 0.75);
   for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
     window.scrollTo(0, y);
+    await frames();
     await new Promise((r) => setTimeout(r, 90));
   }
   window.scrollTo(0, 0);
   await new Promise((r) => setTimeout(r, 250));
+  // Motion that depends on time or scroll position jumps to its resting state, so a capture shows
+  // the designed page rather than whatever frame an animation happened to be on.
+  window.dispatchEvent(new Event("uib:settle"));
+  await frames();
+  await new Promise((r) => setTimeout(r, 50));
 }
+"""
+
+# Installed before the page loads: layout shift and long tasks are only observable from the start.
+_PERF_JS = """
+window.__uibPerf = { cls: 0, longTaskMs: 0 };
+try {
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) if (!e.hadRecentInput) window.__uibPerf.cls += e.value;
+  }).observe({ type: "layout-shift", buffered: true });
+  new PerformanceObserver((list) => {
+    for (const e of list.getEntries()) window.__uibPerf.longTaskMs += Math.max(0, e.duration - 50);
+  }).observe({ type: "longtask", buffered: true });
+} catch (e) {}
 """
 VIEWPORTS: dict[Breakpoint, tuple[int, int]] = {
     Breakpoint.mobile: (390, 844),
@@ -119,6 +141,7 @@ class PlaywrightRenderer:
                 "console", lambda m: console_errors.append(m.text) if m.type == "error" else None
             )
             page.on("pageerror", lambda e: console_errors.append(str(e)))
+            await page.add_init_script(_PERF_JS)
             try:
                 await page.goto(url, wait_until="load")
                 await page.evaluate(_DISPATCH_JS, payload)
@@ -146,6 +169,7 @@ class PlaywrightRenderer:
             screenshots=screenshots,
             dom_outline=json.dumps(outline[self.breakpoints[-1]], separators=(",", ":")),
             render_time_ms=(time.perf_counter() - start) * 1000,
+            findings=findings,
         )
         log.info(
             "render.complete",

@@ -79,3 +79,14 @@ async def test_contrast_and_target_size_still_fire():
 async def test_inline_link_in_text_is_exempt_from_target_size():
     findings = await run_checks('<p>Read the <a href="#x">terms</a> first.</p>')
     assert not issues(findings, "below 24x24")
+
+
+async def test_contrast_reads_modern_colour_syntax():
+    """Tailwind v4 computes translucent utilities to oklab()/color(srgb ...). Parsing only rgb()
+    measured text against the wrong background: readable text was reported, and could be missed."""
+    readable = """<div style="background: oklab(0.97 0.005 0.01 / 0.95)">
+      <p style="color: color(srgb 0.13 0.1 0.08)">Readable on a translucent light panel</p></div>"""
+    unreadable = """<div style="background: oklch(0.95 0.01 80)">
+      <p style="color: oklch(0.9 0.01 80)">Pale on pale</p></div>"""
+    assert not issues(await run_checks(readable), "text contrast")
+    assert issues(await run_checks(unreadable), "text contrast")

@@ -6,9 +6,74 @@ See `agentic-ui-builder-phase-prompts.md` for the full phase spec.
 
 ## Status
 
-Phases 01-06 and 11-13 complete: foundation, all static registries, the deterministic resolver
-(`DesignSpec` -> `RenderModel`), the browser renderer with deterministic screenshot checks, and
-retrieval. Agents (Phases 07-10, 14-15) and learning (16) are next.
+Phases 01-15 complete and running end to end: foundation, all static registries, retrieval, the
+LLM agent chain (Clarifier -> UX Planner -> Design Director -> Compact Design Builder), the
+deterministic resolver (`DesignSpec` -> `RenderModel`), the browser renderer with deterministic
+checks, the screenshot Verifier and the targeted Fixer. Learning (16) is next.
+
+    uib run -y "An online shop selling specialty coffee beans and loose-leaf tea"
+
+writes each screen's spec, verification and screenshots under `runs/<run id>/`. Without `-y` the
+clarifying questions are asked interactively.
+
+**Verify/fix.** The verifier sees every breakpoint's screenshot plus the renderer's deterministic
+findings, which are authoritative. Status is derived, not chosen by the model: any critical or
+major issue means `needs_fix`; minor issues are reported only. The fixer returns small patches
+(`variant`, `type`, `animation`, `layout`, `columns`, `remove`, page `density`) limited to the
+sections an issue names, and a patch is accepted only if the patched spec still resolves. After
+`UIB_MAX_DESIGN_ITERATIONS` fixes a screen finalizes with its open issues rather than erroring.
+
+**Rate limits.** Screenshots dominate token use. Set `UIB_VERIFIER_MODEL=gpt-4o` when the main
+model is gpt-4o-mini: mini bills image tiles ~30x heavier (about 60k vs 2k input tokens per verify),
+which is slower, dearer and trips tokens-per-minute limits. `UIB_MAX_PARALLEL_SCREENS` (default 2)
+caps how many screens run at once. A screen that fails (rate limit, invalid output after repairs)
+is reported on its own; the others still finish.
+
+**Design system (M6).** The Director picks brand axes by name, never raw values: a `palette`
+(11, each WCAG-AA checked when the registry loads), `typography` (9 self-hosted font pairings with
+a fluid `clamp()` type scale) and `radius` (corner personality). They flow through `DesignSpec` to
+CSS variables, which Tailwind v4 reads, so every component follows the brand. Section tones
+(`inverse`, `accent`...) re-scope the colour roles so anything inside a dark band stays readable.
+
+**Component library (M7).** 76 components, 206 variants, in `frontend/src/sections/<module>.tsx`
+with catalog entries in `app/catalog/data/<module>.py`, built on shared primitives (`src/ui`:
+Radix, Embla, lucide). Conventions: `frontend/src/sections/README.md`.
+
+    uib gallery --category commerce --palette noir --typography luxe_serif --radius none
+    uib view gallery/noir
+
+renders every component x variant under any brand with the renderer's checks.
+`tests/integration/test_design_system.py` holds the exit criteria: one page reads as five
+distinct brands and stays accessible; every variant renders cleanly under a light and a dark brand.
+
+**Motion (M8).** The Director sets page intensity; the Builder may pick one animation per
+section; `app/dsl/choreography.py` expands that deterministically by component role (a hero's
+headline reveals and its image settles on scroll, a grid staggers in and its cards lift, a stats
+band counts up) and enforces a per-page budget: subtle pages get no attention-grabbing motion,
+moderate and expressive pages cap headline reveals, scroll-linked effects, magnetic CTAs, tilt,
+stacking and ambient loops, earliest sections first. The frontend runtime (`src/motion/`) executes
+the behaviours through markers the primitives set, so every component moves without knowing it.
+Add-to-cart flights, sliding option chips, tab crossfades and toggle pops are page-wide. Reduced
+motion runs none of it; the renderer dispatches `uib:settle` so captures show every section at
+rest, and the checks report layout shift, main-thread blocking and more than four continuous loops.
+
+Every planned screen is built. Clarifier, Planner and Director run once per product; the Director
+assigns each planned screen a recipe (`DesignDirection.screens`), and the graph fans out one
+retrieval -> build -> resolve -> render -> verify/fix subgraph per screen. Results land in
+`state["screens"]` in plan order, each with its own fix loop. Ecommerce is covered end to end by
+`ecommerce_home`, `ecommerce_listing`, `ecommerce_product`, `ecommerce_cart` and
+`ecommerce_checkout`.
+
+Motion has one owner per level: the Design Director sets the page-level strategy (its intensity
+comes from `PAGE_ANIMATION_ALIASES`, the same table the resolver expands it with) and the Builder
+picks per-section motion from each component's `animation_capabilities`. The Builder's output
+schema carries sections only, so `screen_id`, `recipe`, `theme`, `visual_style`, `density` and page
+animation stay derived from upstream state rather than restated by the model.
+
+Each agent gets two repair retries: its output is checked against the registries, and an unknown
+recipe, theme, variant, section slot or unsupported animation is handed back to the model with the
+exact error before that screen fails. A required slot with only one allowed component (usually the
+footer) is filled in deterministically rather than sent back.
 
 **Providers.** OpenAI is the default for both chat and embeddings; Anthropic is also wired.
 Set `UIB_LLM_PROVIDER` / `UIB_EMBEDDING_PROVIDER`. Leaving `UIB_LLM_MODEL` empty takes the
@@ -91,10 +156,12 @@ uib render spec.json --out screenshots
 
 ```
 START → clarifier ─(needs_clarification)→ END
-              └─(ready)→ planner → design_director → retrieval → design_builder
-                → resolver → renderer → verifier ─(pass)→ finalize → END
-                                             └─(needs_fix)→ fixer ─(success)→ resolver
-                                                                 └─(failure)→ finalize
+              └─(ready)→ planner → design_director ─(one Send per planned screen)→ screen → END
+
+screen:  retrieval → design_builder → resolver → renderer → verifier ─(pass)→ finalize
+                                                  └─(needs_fix, budget left)→ fixer ─(success)→ resolver
+                                                  └─(needs_fix, budget spent)→ finalize
+                                                                     fixer ─(failure)→ finalize
 ```
 
-Iterations are capped by `UIB_MAX_DESIGN_ITERATIONS` (default 3).
+Fixes per screen are capped by `UIB_MAX_DESIGN_ITERATIONS` (default 3).

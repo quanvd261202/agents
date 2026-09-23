@@ -2,6 +2,9 @@ from app.layout.models import LayoutType as L
 from app.recipes.models import RecipeDefinition
 from app.recipes.models import RecipeSection as S
 
+# Default copy for commerce pages, so a shop never falls back to the SaaS placeholder text.
+_SHOP_NAV = {"links": "Shop,New arrivals,Journal,Help", "actions": "Cart"}
+
 saas_landing = RecipeDefinition(
     id="saas_landing",
     page_type="landing",
@@ -20,7 +23,7 @@ saas_landing = RecipeDefinition(
         S(
             id="social_proof",
             purpose="trust",
-            component_types=["social_proof"],
+            component_types=["social_proof", "press_quotes"],
             required=False,
             default_variant="logos",
         ),
@@ -35,7 +38,7 @@ saas_landing = RecipeDefinition(
         S(
             id="product_showcase",
             purpose="show the product",
-            component_types=["product_showcase"],
+            component_types=["product_showcase", "video_showcase", "tabs_showcase"],
             required=False,
             reorderable=True,
             reorder_group="body",
@@ -43,7 +46,7 @@ saas_landing = RecipeDefinition(
         S(
             id="metrics",
             purpose="proof by numbers",
-            component_types=["metrics"],
+            component_types=["metrics", "stats_band"],
             required=False,
             reorderable=True,
             reorder_group="body",
@@ -58,14 +61,41 @@ saas_landing = RecipeDefinition(
             reorder_group="body",
         ),
         S(
+            id="how_it_works",
+            purpose="explain the path to value",
+            component_types=["steps", "feature_split", "media_text"],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="testimonial_feature",
+            purpose="one voice, told large",
+            component_types=["testimonial_spotlight", "editorial_quote"],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="integrations",
+            purpose="fits the stack they already use",
+            component_types=["integrations_grid"],
+            required=False,
+        ),
+        S(
             id="pricing",
             purpose="commit",
-            component_types=["pricing_table"],
+            component_types=["pricing_table", "comparison_table"],
             required=False,
             goal="signup",
         ),
         S(id="faq", purpose="remove objections", component_types=["faq"], required=False),
-        S(id="cta", purpose="final conversion", component_types=["cta"], goal="signup"),
+        S(
+            id="cta",
+            purpose="final conversion",
+            component_types=["cta", "cta_split", "app_download", "newsletter_signup"],
+            goal="signup",
+        ),
         S(id="footer", purpose="secondary navigation", component_types=["footer"]),
     ],
     layout_rules={
@@ -82,7 +112,12 @@ ecommerce_product = RecipeDefinition(
     domains=["ecommerce"],
     goals=["add_to_cart"],
     sections=[
-        S(id="navigation", purpose="wayfinding + cart", component_types=["navigation"]),
+        S(
+            id="navigation",
+            purpose="wayfinding + cart",
+            component_types=["navigation"],
+            content=_SHOP_NAV,
+        ),
         S(
             id="breadcrumb",
             purpose="category context",
@@ -97,6 +132,12 @@ ecommerce_product = RecipeDefinition(
             goal="add_to_cart",
         ),
         S(
+            id="customize",
+            purpose="configure the product before buying",
+            component_types=["product_customizer"],
+            required=False,
+        ),
+        S(
             id="trust_signals",
             purpose="reduce purchase anxiety",
             component_types=["trust_signals"],
@@ -105,7 +146,7 @@ ecommerce_product = RecipeDefinition(
         S(
             id="product_features",
             purpose="details",
-            component_types=["feature_bento", "faq"],
+            component_types=["feature_bento", "faq", "media_text", "feature_split", "brand_story"],
             required=False,
             layout=L.grid,
             reorderable=True,
@@ -114,7 +155,7 @@ ecommerce_product = RecipeDefinition(
         S(
             id="reviews",
             purpose="social proof",
-            component_types=["reviews"],
+            component_types=["reviews", "testimonial_spotlight"],
             required=False,
             reorderable=True,
             reorder_group="body",
@@ -123,6 +164,12 @@ ecommerce_product = RecipeDefinition(
             id="related_products",
             purpose="cross-sell",
             component_types=["related_products"],
+            required=False,
+        ),
+        S(
+            id="subscription",
+            purpose="subscribe and save",
+            component_types=["subscription_offer"],
             required=False,
         ),
         S(
@@ -138,6 +185,346 @@ ecommerce_product = RecipeDefinition(
     responsive_rules={"mobile": "gallery above buy box; sticky add-to-cart"},
 )
 
+ecommerce_home = RecipeDefinition(
+    id="ecommerce_home",
+    page_type="storefront",
+    purpose="Welcome shoppers and route them into the catalog",
+    domains=["ecommerce"],
+    goals=["browse"],
+    sections=[
+        S(
+            id="announcement",
+            purpose="offer or shipping promise above everything",
+            component_types=["announcement_bar"],
+            required=False,
+        ),
+        S(
+            id="navigation",
+            purpose="wayfinding + cart",
+            component_types=["navigation"],
+            content=_SHOP_NAV,
+        ),
+        S(
+            id="hero",
+            purpose="brand promise + shop CTA",
+            component_types=["hero"],
+            layout=L.split_,
+            goal="browse",
+            content={
+                "headline": "Find your next favourite",
+                "subhead": "Small-batch goods, chosen with care and shipped fast.",
+                "primary_cta": "Shop now",
+                "secondary_cta": "Browse collections",
+            },
+        ),
+        S(
+            id="collections",
+            purpose="route into the main categories",
+            component_types=["collection_grid", "category_nav"],
+            required=False,
+        ),
+        S(
+            id="featured_products",
+            purpose="best sellers to start browsing",
+            component_types=["product_grid"],
+            layout=L.grid,
+            goal="browse",
+        ),
+        S(
+            id="promo",
+            purpose="seasonal campaign or offer",
+            component_types=["promo_banner", "cta_split"],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="brand_story",
+            purpose="why this store",
+            component_types=[
+                "feature_bento",
+                "brand_story",
+                "media_text",
+                "feature_split",
+                "manifesto",
+            ],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="showcase",
+            purpose="let the product be seen large",
+            component_types=[
+                "product_spotlight",
+                "lookbook",
+                "gallery_masonry",
+                "image_band",
+                "video_showcase",
+            ],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="testimonials",
+            purpose="trust",
+            component_types=[
+                "testimonial_grid",
+                "reviews",
+                "testimonial_spotlight",
+                "press_quotes",
+                "social_proof",
+            ],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="trust_signals",
+            purpose="shipping and returns promise",
+            component_types=["trust_signals"],
+            required=False,
+        ),
+        S(
+            id="newsletter",
+            purpose="keep the relationship after the visit",
+            component_types=["newsletter_signup", "subscription_offer"],
+            required=False,
+        ),
+        S(
+            id="cta",
+            purpose="final push to shop",
+            component_types=["cta", "cta_split", "location_hours"],
+            required=False,
+            content={
+                "headline": "New arrivals every week",
+                "body": "Free shipping on orders over $75.",
+                "primary_cta": "Shop the collection",
+            },
+        ),
+        S(id="footer", purpose="secondary navigation", component_types=["footer"]),
+    ],
+    layout_rules={"hero_first": "hero must directly follow navigation"},
+    responsive_rules={"mobile": "hero stacks; product grid 1-2 columns"},
+)
+
+ecommerce_listing = RecipeDefinition(
+    id="ecommerce_listing",
+    page_type="product_listing",
+    purpose="Help a shopper narrow the catalog to products worth opening",
+    domains=["ecommerce"],
+    goals=["find_product"],
+    sections=[
+        S(
+            id="navigation",
+            purpose="wayfinding + cart",
+            component_types=["navigation"],
+            content=_SHOP_NAV,
+        ),
+        S(
+            id="breadcrumb",
+            purpose="category context",
+            component_types=["breadcrumb"],
+            required=False,
+        ),
+        S(
+            id="category_header",
+            purpose="what this category is, with sub-categories",
+            component_types=["category_hero", "category_nav"],
+            required=False,
+        ),
+        S(id="filters", purpose="narrow + sort", component_types=["product_filters", "search_bar"]),
+        S(
+            id="product_grid",
+            purpose="the results",
+            component_types=["product_grid"],
+            layout=L.grid,
+            goal="find_product",
+        ),
+        S(
+            id="pagination",
+            purpose="more results",
+            component_types=["pagination"],
+            required=False,
+        ),
+        S(
+            id="promo",
+            purpose="campaign between browsing",
+            component_types=["promo_banner"],
+            required=False,
+        ),
+        S(
+            id="recently_viewed",
+            purpose="recovery",
+            component_types=["related_products"],
+            required=False,
+            default_variant="grid",
+        ),
+        S(id="footer", purpose="secondary navigation", component_types=["footer"]),
+    ],
+    layout_rules={"filters_before_results": "filters must directly precede product_grid"},
+    responsive_rules={"mobile": "filters collapse to a sheet; grid 1-2 columns"},
+)
+
+ecommerce_cart = RecipeDefinition(
+    id="ecommerce_cart",
+    page_type="cart",
+    purpose="Let a shopper review what they are buying and move to checkout",
+    domains=["ecommerce"],
+    goals=["checkout"],
+    sections=[
+        S(
+            id="navigation",
+            purpose="wayfinding",
+            component_types=["navigation"],
+            content=_SHOP_NAV,
+        ),
+        S(id="cart_items", purpose="review + adjust", component_types=["cart_items"]),
+        S(
+            id="order_summary",
+            purpose="cost + proceed",
+            component_types=["order_summary"],
+            goal="checkout",
+        ),
+        S(
+            id="trust_signals",
+            purpose="reduce purchase anxiety",
+            component_types=["trust_signals"],
+            required=False,
+        ),
+        S(
+            id="cross_sell",
+            purpose="add-ons",
+            component_types=["related_products"],
+            required=False,
+        ),
+        S(id="footer", purpose="secondary navigation", component_types=["footer"]),
+    ],
+    layout_rules={"summary_after_items": "order_summary must directly follow cart_items"},
+    responsive_rules={"mobile": "summary below items; sticky checkout button"},
+)
+
+ecommerce_checkout = RecipeDefinition(
+    id="ecommerce_checkout",
+    page_type="checkout",
+    purpose="Collect shipping and payment with as little friction as possible",
+    domains=["ecommerce"],
+    goals=["purchase"],
+    sections=[
+        S(
+            id="navigation",
+            purpose="exit-light header",
+            component_types=["navigation"],
+            default_variant="minimal",
+            content=_SHOP_NAV,
+        ),
+        S(
+            id="checkout_form",
+            purpose="contact, shipping, payment",
+            component_types=["checkout_form"],
+            goal="purchase",
+        ),
+        S(
+            id="order_summary",
+            purpose="what is being paid for",
+            component_types=["order_summary"],
+            default_variant="compact",
+        ),
+        S(
+            id="trust_signals",
+            purpose="secure payment reassurance",
+            component_types=["trust_signals"],
+            required=False,
+        ),
+        S(
+            id="footer",
+            purpose="legal",
+            component_types=["footer"],
+            required=False,
+            default_variant="minimal",
+        ),
+    ],
+    layout_rules={"no_distractions": "no cross-sell or marketing sections"},
+    responsive_rules={"mobile": "summary collapses above the form"},
+)
+
+brand_page = RecipeDefinition(
+    id="brand_page",
+    page_type="about",
+    purpose="Tell the brand's story and earn trust beyond the product",
+    domains=["ecommerce", "saas", "*"],
+    goals=["trust", "visit"],
+    sections=[
+        S(
+            id="announcement",
+            purpose="notice above everything",
+            component_types=["announcement_bar"],
+            required=False,
+        ),
+        S(id="navigation", purpose="wayfinding", component_types=["navigation"]),
+        S(id="hero", purpose="the brand in one image and line", component_types=["hero"]),
+        S(
+            id="manifesto",
+            purpose="what the brand believes",
+            component_types=["manifesto", "editorial_quote"],
+            required=False,
+        ),
+        S(
+            id="story",
+            purpose="where it came from",
+            component_types=["brand_story", "media_text", "rich_text"],
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="history",
+            purpose="milestones",
+            component_types=["timeline", "stats_band"],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="people",
+            purpose="the people behind it",
+            component_types=["team_grid"],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="gallery",
+            purpose="the place and the craft",
+            component_types=["gallery_masonry", "image_band", "video_showcase"],
+            required=False,
+            reorderable=True,
+            reorder_group="body",
+        ),
+        S(
+            id="proof",
+            purpose="what others say",
+            component_types=["press_quotes", "testimonial_spotlight", "social_proof"],
+            required=False,
+        ),
+        S(
+            id="visit",
+            purpose="where to find us",
+            component_types=["location_hours", "contact_section"],
+            required=False,
+        ),
+        S(
+            id="newsletter",
+            purpose="stay in touch",
+            component_types=["newsletter_signup"],
+            required=False,
+        ),
+        S(id="footer", purpose="secondary navigation", component_types=["footer"]),
+    ],
+    layout_rules={"story_early": "story must come before gallery and proof"},
+    responsive_rules={"mobile": "single column; galleries collapse to two columns"},
+)
+
 dashboard = RecipeDefinition(
     id="dashboard",
     page_type="dashboard",
@@ -148,7 +535,12 @@ dashboard = RecipeDefinition(
     sections=[
         S(id="sidebar", purpose="app navigation", component_types=["dashboard_sidebar"]),
         S(id="page_header", purpose="context + actions", component_types=["page_header"]),
-        S(id="stats", purpose="KPIs at a glance", component_types=["stats"], layout=L.grid),
+        S(
+            id="stats",
+            purpose="KPIs at a glance",
+            component_types=["stats", "kpi_hero"],
+            layout=L.grid,
+        ),
         S(
             id="primary_visualization",
             purpose="main trend",
@@ -158,7 +550,7 @@ dashboard = RecipeDefinition(
         S(
             id="secondary_content",
             purpose="detail table",
-            component_types=["data_table", "chart_panel"],
+            component_types=["data_table", "chart_panel", "progress_list"],
             required=False,
             reorderable=True,
             reorder_group="body",
@@ -166,7 +558,7 @@ dashboard = RecipeDefinition(
         S(
             id="activity",
             purpose="recent events",
-            component_types=["activity_feed"],
+            component_types=["activity_feed", "notification_list"],
             required=False,
             reorderable=True,
             reorder_group="body",
@@ -214,4 +606,14 @@ settings = RecipeDefinition(
     responsive_rules={"mobile": "settings_navigation becomes tabs; forms full width"},
 )
 
-RECIPES: list[RecipeDefinition] = [saas_landing, ecommerce_product, dashboard, settings]
+RECIPES: list[RecipeDefinition] = [
+    saas_landing,
+    ecommerce_home,
+    ecommerce_listing,
+    ecommerce_product,
+    ecommerce_cart,
+    ecommerce_checkout,
+    brand_page,
+    dashboard,
+    settings,
+]

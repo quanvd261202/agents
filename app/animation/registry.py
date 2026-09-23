@@ -165,6 +165,107 @@ ANIMATIONS: list[AnimationDefinition] = [
 ]
 
 
+# --- M8: behaviours the frontend motion runtime executes -----------------------------------
+def _levels(**by_level: P) -> dict[I, P]:
+    return {I.none: P(), **{I(k): v for k, v in by_level.items()}}
+
+
+ANIMATIONS += [
+    AnimationDefinition(
+        id="blur_in",
+        description="Fade in from a soft blur",
+        category="entrance",
+        presets=_levels(
+            subtle=P(opacity_from=0, blur_px=6, duration_ms=450, stagger_ms=60),
+            moderate=P(opacity_from=0, blur_px=10, distance=12, duration_ms=600, stagger_ms=80),
+            expressive=P(opacity_from=0, blur_px=16, distance=24, duration_ms=800, stagger_ms=110),
+        ),
+        supports_stagger=True,
+    ),
+    AnimationDefinition(
+        id="headline_reveal",
+        description="Headline words rise into place from behind a mask",
+        category="text",
+        presets=_levels(
+            subtle=P(distance=100, duration_ms=700, stagger_ms=30),
+            moderate=P(distance=110, duration_ms=900, stagger_ms=55),
+            expressive=P(distance=120, duration_ms=1100, stagger_ms=80),
+        ),
+        reduced_motion_fallback="fade",
+    ),
+    AnimationDefinition(
+        id="scroll_zoom",
+        description="Imagery settles from a slight zoom as it scrolls into view",
+        category="scroll",
+        trigger="scroll",
+        once=False,
+        presets=_levels(
+            subtle=P(scale_from=1.06), moderate=P(scale_from=1.12), expressive=P(scale_from=1.2)
+        ),
+        reduced_motion_fallback=None,
+    ),
+    AnimationDefinition(
+        id="scroll_fade",
+        description="Content rises and brightens as it scrolls into view",
+        category="scroll",
+        trigger="scroll",
+        once=False,
+        presets=_levels(
+            subtle=P(distance=24, opacity_from=0.5),
+            moderate=P(distance=40, opacity_from=0.35),
+            expressive=P(distance=64, opacity_from=0.2),
+        ),
+        reduced_motion_fallback=None,
+    ),
+    AnimationDefinition(
+        id="stack",
+        description="The section pins and recedes as the next one slides over it",
+        category="scroll",
+        trigger="scroll",
+        once=False,
+        presets=_levels(
+            subtle=P(scale_from=0.97), moderate=P(scale_from=0.94), expressive=P(scale_from=0.9)
+        ),
+        reduced_motion_fallback=None,
+    ),
+    AnimationDefinition(
+        id="lift",
+        description="Cards rise and deepen their shadow under the pointer",
+        category="interaction",
+        trigger="hover",
+        once=False,
+        presets=_levels(
+            subtle=P(distance=3, duration_ms=200),
+            moderate=P(distance=6, duration_ms=250),
+            expressive=P(distance=10, duration_ms=300),
+        ),
+        reduced_motion_fallback=None,
+    ),
+    AnimationDefinition(
+        id="tilt",
+        description="Imagery tilts in 3D toward the pointer",
+        category="interaction",
+        trigger="hover",
+        once=False,
+        presets=_levels(subtle=P(amplitude=3), moderate=P(amplitude=6), expressive=P(amplitude=10)),
+        reduced_motion_fallback=None,
+    ),
+    AnimationDefinition(
+        id="gradient_drift",
+        description="A soft brand-coloured light slowly drifts behind the section",
+        category="ambient",
+        trigger="always",
+        once=False,
+        presets=_levels(
+            subtle=P(amplitude=0.15, duration_ms=16000),
+            moderate=P(amplitude=0.25, duration_ms=12000),
+            expressive=P(amplitude=0.4, duration_ms=9000),
+        ),
+        reduced_motion_fallback=None,
+    ),
+]
+
+
 class AnimationRegistry(BaseRegistry[AnimationDefinition]):
     kind = "animation"
     not_found_error = UnknownAnimationError

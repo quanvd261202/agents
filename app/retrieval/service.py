@@ -74,7 +74,7 @@ class RetrievalService:
         return await self._repository.search(vector, filters or RetrievalFilters(), limit)
 
     @staticmethod
-    def build_query(req: ClarifiedRequirements, direction: DesignDirection) -> str:
+    def build_query(req: ClarifiedRequirements, direction: DesignDirection, recipe: str) -> str:
         return " ".join(
             filter(
                 None,
@@ -85,7 +85,7 @@ class RetrievalService:
                     req.product,
                     req.primary_goal,
                     " ".join(req.key_features),
-                    direction.recipe.replace("_", " "),
+                    recipe.replace("_", " "),
                 ],
             )
         )
@@ -94,9 +94,10 @@ class RetrievalService:
         self,
         req: ClarifiedRequirements,
         direction: DesignDirection,
+        recipe: str,
         lessons: list[str] | None = None,
     ) -> RetrievedContext:
-        query = self.build_query(req, direction)
+        query = self.build_query(req, direction, recipe)
         style = direction.visual_style.split("_")[-1] or None
 
         components = await self.search(

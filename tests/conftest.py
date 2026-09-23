@@ -15,6 +15,7 @@ from app.models import (
     RenderModel,
     RenderNode,
     RenderResult,
+    ScreenDirection,
     ScreenPlan,
     UXPlan,
     VerificationResult,
@@ -35,10 +36,18 @@ SPEC = DesignSpec(
 
 
 class StubServices:
-    """Scripted verifier: fails `fail_times` before passing."""
+    """Scripted verifier: fails `fail_times` before passing (counted across all screens)."""
 
-    def __init__(self, fail_times: int = 0, fixer_ok: bool = True, ready: bool = True) -> None:
+    def __init__(
+        self,
+        fail_times: int = 0,
+        fixer_ok: bool = True,
+        ready: bool = True,
+        screens: tuple[str, ...] = ("home",),
+    ) -> None:
         self.fail_times, self.fixer_ok, self.ready = fail_times, fixer_ok, ready
+        self.screens = screens
+        self.briefs: list[str] = []
         self.calls: list[str] = []
 
     async def clarify(self, requirement, answers):
@@ -47,16 +56,17 @@ class StubServices:
             return ClarifierOutput(status="needs_clarification", questions=[{"question": "Who?"}])
         return ClarifierOutput(status="ready", clarified_requirements=REQ)
 
-    async def plan(self, req):
+    async def plan(self, req, brief=""):
         self.calls.append("plan")
+        self.briefs.append(brief)
         return UXPlan(
             product="x",
             user_goals=["buy"],
             journey=["a"],
-            screens=[ScreenPlan(id="home", purpose="d")],
+            screens=[ScreenPlan(id=s, purpose="d") for s in self.screens],
         )
 
-    async def direct(self, req, plan):
+    async def direct(self, req, plan, brief=""):
         self.calls.append("direct")
         return DesignDirection(
             visual_style="m",
@@ -65,18 +75,18 @@ class StubServices:
             radius="l",
             layout_strategy="g",
             animation="subtle",
-            recipe="saas_landing",
+            screens=[ScreenDirection(screen_id=s, recipe="saas_landing") for s in self.screens],
         )
 
-    async def retrieve(self, req, direction, lessons=None):
+    async def retrieve(self, req, direction, recipe, lessons=None):
         self.calls.append("retrieve")
         return RetrievedContext(
             components=["hero", "cta"], layouts=["stack"], recipes=["saas_landing"]
         )
 
-    async def build(self, req, plan, direction, ctx):
+    async def build(self, req, screen, direction, ctx):
         self.calls.append("build")
-        return SPEC
+        return SPEC.model_copy(update={"screen_id": screen.id})
 
     def resolve(self, spec, *, reduced_motion=False):
         self.calls.append("resolve")

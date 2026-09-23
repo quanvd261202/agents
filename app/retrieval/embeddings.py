@@ -74,6 +74,7 @@ class OpenAIEmbeddingProvider:
         dimensions: int = 1536,
         base_url: str | None = None,
         batch_size: int = 128,
+        api_key: str | None = None,
     ) -> None:
         try:
             from openai import AsyncOpenAI
@@ -82,6 +83,8 @@ class OpenAIEmbeddingProvider:
         kwargs: dict[str, Any] = {}
         if base_url:
             kwargs["base_url"] = base_url
+        if api_key:
+            kwargs["api_key"] = api_key
         self._client = AsyncOpenAI(**kwargs)
         self._model = model
         self._dimensions = dimensions
@@ -116,9 +119,12 @@ def build_embedding_provider(
     model: str = "text-embedding-3-small",
     dimensions: int = 1536,
     base_url: str | None = None,
+    api_key: str | None = None,
 ) -> EmbeddingProvider:
     if provider == "hashing":
         return HashingEmbeddingProvider(dimensions=min(dimensions, 512))
     if provider == "openai":
-        return OpenAIEmbeddingProvider(model=model, dimensions=dimensions, base_url=base_url)
+        return OpenAIEmbeddingProvider(
+            model=model, dimensions=dimensions, base_url=base_url, api_key=api_key
+        )
     raise ConfigurationError(f"Unknown embedding provider: {provider}")

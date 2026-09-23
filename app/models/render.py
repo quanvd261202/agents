@@ -7,6 +7,7 @@ from typing import Any
 from pydantic import Field
 
 from app.models.common import Breakpoint, StrictModel
+from app.models.verification import Issue
 
 
 class ResolvedAnimation(StrictModel):
@@ -14,6 +15,14 @@ class ResolvedAnimation(StrictModel):
     engine: str = "motion"
     config: dict[str, Any] = Field(default_factory=dict)
     reduced_motion_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class MotionBehavior(StrictModel):
+    """One runtime motion behaviour on a section: a headline reveal, a scroll zoom, a hover tilt.
+    Chosen by name from the animation vocabulary; the frontend motion runtime executes it."""
+
+    name: str
+    params: dict[str, float | int | str] = Field(default_factory=dict)
 
 
 class ResolvedLayout(StrictModel):
@@ -30,6 +39,8 @@ class RenderNode(StrictModel):
     tokens: dict[str, str] = Field(default_factory=dict)  # css var references
     layout: ResolvedLayout | None = None
     animation: ResolvedAnimation | None = None
+    #: Behaviours layered on the entrance: the choreographer's expansion of the section's motion.
+    motion: list[MotionBehavior] = Field(default_factory=list)
     children: list[RenderNode] = Field(default_factory=list)
 
 
@@ -47,3 +58,5 @@ class RenderResult(StrictModel):
     screenshots: dict[Breakpoint, str] = Field(default_factory=dict)  # paths or base64
     dom_outline: str | None = None
     render_time_ms: float = 0.0
+    #: Deterministic in-page checks. The verifier treats these as authoritative.
+    findings: list[Issue] = Field(default_factory=list)

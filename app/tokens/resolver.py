@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from app.core.exceptions import UnknownTokenError, ValidationError
 from app.models.common import Breakpoint, Density
 from app.tokens.models import ResponsiveValue, Theme, TokenCategory, TokenValue
+from app.tokens.palettes import PaletteRegistry, default_palette_registry, luminance
 from app.tokens.registry import ThemeRegistry
 
 _BP_ORDER = [Breakpoint.mobile, Breakpoint.tablet, Breakpoint.desktop, Breakpoint.wide]
@@ -51,9 +52,40 @@ class ResolvedTokens:
         return out
 
 
+#: Type steps relative to body (0). Display is the hero headline; caption the smallest label.
+TYPE_STEPS = {
+    "display": 6,
+    "h1": 5,
+    "h2": 4,
+    "h3": 3,
+    "h4": 2,
+    "lead": 1,
+    "body": 0,
+    "small": -1,
+    "caption": -2,
+}
+_FLUID_MIN_VW, _FLUID_MAX_VW = 390, 1440  # the phone and wide-desktop widths the scale spans
+_MOBILE_RATIO, _MOBILE_BASE, _DESKTOP_BASE = 1.2, 16.0, 17.0
+
+
+def fluid_size(step: int, ratio: float) -> str:
+    """clamp() that grows linearly from the phone size to the desktop size across viewports."""
+    lo = _MOBILE_BASE * _MOBILE_RATIO**step
+    hi = _DESKTOP_BASE * ratio**step
+    if step <= 0 or hi <= lo:
+        return f"{round(lo / 16, 4):g}rem"
+    slope = (hi - lo) / (_FLUID_MAX_VW - _FLUID_MIN_VW)
+    intercept = lo - slope * _FLUID_MIN_VW
+    return (
+        f"clamp({round(lo / 16, 4):g}rem, {round(intercept / 16, 4):g}rem + "
+        f"{round(slope * 100, 4):g}vw, {round(hi / 16, 4):g}rem)"
+    )
+
+
 class TokenResolver:
-    def __init__(self, themes: ThemeRegistry) -> None:
+    def __init__(self, themes: ThemeRegistry, palettes: PaletteRegistry | None = None) -> None:
         self._themes = themes
+        self._palettes = palettes or default_palette_registry()
 
     def resolve(
         self,
@@ -62,6 +94,7 @@ class TokenResolver:
         density: Density | str = Density.comfortable,
         radius: str | None = None,
         typography: str | None = None,
+        palette: str | None = None,
         overrides: dict[str, TokenValue] | None = None,
     ) -> ResolvedTokens:
         chain = self._themes.chain(theme_id)
@@ -83,6 +116,7 @@ class TokenResolver:
                 else:
                     out.values[key] = val
 
+        self._apply_palette(out, palette)
         self._apply_density(out, leaf, str(density))
         self._apply_radius(out, leaf, radius)
         self._apply_typography(out, leaf, typography)
@@ -126,8 +160,16 @@ class TokenResolver:
             raise ValidationError(
                 f"invalid radius '{chosen}'; allowed: {list(theme.radius_scale)}", target="radius"
             )
-        out.values["radius.base"] = theme.radius_scale[chosen]
+        base = theme.radius_scale[chosen]
+        out.values["radius.base"] = base
         out.values["radius.scale"] = chosen
+        # Role radii derive from one choice, so a page's corners share a single personality.
+        px = 0.0 if chosen == "full" else float(base.removesuffix("px"))
+        role = {"sm": px / 2, "lg": px * 1.5, "card": px, "media": px * 1.25}
+        for name, value in role.items():
+            out.values[f"radius.{name}"] = f"{value:g}px"
+        out.values["radius.button"] = "9999px" if chosen == "full" else f"{px:g}px"
+        out.values["radius.pill"] = "9999px"
 
     @staticmethod
     def _apply_typography(out: ResolvedTokens, theme: Theme, preset: str | None) -> None:
@@ -137,9 +179,41 @@ class TokenResolver:
                 f"invalid typography '{chosen}'; allowed: {list(theme.typography_presets)}",
                 target="typography",
             )
-        for k, v in theme.typography_presets.get(chosen, {}).items():
-            out.values[f"typography.{k}"] = v
+        pairing = theme.typography_presets.get(chosen, {})
+        for k, v in pairing.items():
+            if k != "mood":  # guidance for the Director, not a style
+                out.values[f"typography.{k}"] = v
         out.values["typography.preset"] = chosen
+        ratio = float(pairing.get("scale_ratio", "1.25"))
+        for name, step in TYPE_STEPS.items():
+            out.values[f"typography.size_{name}"] = fluid_size(step, ratio)
+
+    def _apply_palette(self, out: ResolvedTokens, palette_id: str | None) -> None:
+        """A palette replaces the theme's colours wholesale and tints its shadows."""
+        if palette_id is None:
+            tint = "0 0 0"
+        else:
+            palette = self._palettes.get(palette_id)
+            for key in [k for k in out.values if k.startswith("color.")]:
+                del out.values[key]
+            for role, value in palette.colors.items():
+                out.values[f"color.{role}"] = value
+            out.values["color.mode"] = palette.mode
+            tint = palette.shadow
+        # Shadows need far more opacity to read on a dark background.
+        bg = str(out.values.get("color.bg", "#ffffff"))
+        strength = 0.35 if bg.startswith("#") and luminance(bg) < 0.2 else 0.08
+        for name, (y, blur, alpha) in {
+            "sm": (1, 2, 0.6),
+            "md": (6, 18, 1.0),
+            "lg": (16, 40, 1.3),
+            "xl": (28, 70, 1.6),
+        }.items():
+            if out.values.get(f"shadow.{name}") == "none":
+                continue  # a theme that opts out of shadows (minimal) keeps them off
+            out.values[f"shadow.{name}"] = (
+                f"0 {y}px {blur}px {-(y // 2)}px rgb({tint} / {round(strength * alpha, 3)})"
+            )
 
     @staticmethod
     def _apply_overrides(out: ResolvedTokens, overrides: dict[str, TokenValue]) -> None:

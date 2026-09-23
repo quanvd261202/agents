@@ -9,7 +9,6 @@ import pytest
 from app.dsl import default_design_resolver
 from app.models import DesignSpec
 from app.models.common import Breakpoint
-from app.models.dsl import LayoutIntent
 from app.renderer import PlaywrightRenderer, StaticServer
 from app.renderer.server import FRONTEND_DIST
 from tests.fixtures.specs import ALL
@@ -66,18 +65,12 @@ async def test_no_accessibility_regressions(server, resolver, name, tmp_path):
 
 
 async def test_deterministic_checks_catch_a_broken_layout(server, resolver, tmp_path):
-    """Six columns of cards on a phone must be reported, not silently clipped."""
-    spec = DesignSpec.model_validate(ALL["saas_landing"])
-    sections = []
-    for s in spec.sections:
-        if s.id == "features":
-            s = s.model_copy(update={"layout": LayoutIntent(type="bento", columns=6)})
-        sections.append(s)
-    model = resolver.resolve(spec.model_copy(update={"sections": sections}))
-    # strip the mobile collapse the layout engine adds, simulating a bad fix
-    feature_node = next(n for n in model.root.children if n.id == "features")
-    feature_node.layout.responsive.pop(Breakpoint.mobile, None)
-    feature_node.layout.responsive.pop(Breakpoint.tablet, None)
+    """A layout wider than a phone must be reported, not silently clipped. Components collapse on
+    their own now, so the bad fix is simulated on the page layout the engine hands the renderer."""
+    model = resolver.resolve(DesignSpec.model_validate(ALL["saas_landing"]))
+    assert model.root.layout is not None
+    for snapshot in (model.root.layout.props, *model.root.layout.responsive.values()):
+        snapshot["minWidth"] = "1100px"
     out = await PlaywrightRenderer(server=server, screenshot_dir=tmp_path).render_with_findings(
         model
     )

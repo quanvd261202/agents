@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -9,7 +10,10 @@ from pathlib import Path
 
 from app.core.exceptions import RenderError
 
-FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+# UIB_FRONTEND_DIST points the renderer at another bundle, so parallel builds never collide.
+FRONTEND_DIST = Path(
+    os.environ.get("UIB_FRONTEND_DIST") or Path(__file__).resolve().parents[2] / "frontend" / "dist"
+).resolve()
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):

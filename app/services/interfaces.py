@@ -10,6 +10,7 @@ from app.models import (
     FixResult,
     RenderModel,
     RenderResult,
+    ScreenPlan,
     UXPlan,
     VerificationResult,
 )
@@ -21,11 +22,13 @@ class ClarifierService(Protocol):
 
 
 class PlannerService(Protocol):
-    async def plan(self, req: ClarifiedRequirements) -> UXPlan: ...
+    async def plan(self, req: ClarifiedRequirements, brief: str = "") -> UXPlan: ...
 
 
 class DesignDirectorService(Protocol):
-    async def direct(self, req: ClarifiedRequirements, plan: UXPlan) -> DesignDirection: ...
+    async def direct(
+        self, req: ClarifiedRequirements, plan: UXPlan, brief: str = ""
+    ) -> DesignDirection: ...
 
 
 class RetrievalService(Protocol):
@@ -33,6 +36,7 @@ class RetrievalService(Protocol):
         self,
         req: ClarifiedRequirements,
         direction: DesignDirection,
+        recipe: str,
         lessons: list[str] | None = None,
     ) -> RetrievedContext: ...
 
@@ -41,7 +45,7 @@ class DesignBuilderService(Protocol):
     async def build(
         self,
         req: ClarifiedRequirements,
-        plan: UXPlan,
+        screen: ScreenPlan,
         direction: DesignDirection,
         context: RetrievedContext,
     ) -> DesignSpec: ...

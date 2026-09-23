@@ -1,6 +1,8 @@
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
 import { COMPONENTS, CONTAINERS, type NodeProps } from "./components";
 import { Animated } from "./animate";
+import { attachMotion, settleAll } from "./motion/runtime";
+import { installGlobalMotion } from "./motion/global";
 import { currentBreakpoint, layoutStyle } from "./layout";
 import type { Breakpoint, RenderModel, RenderNode } from "./types";
 
@@ -23,7 +25,30 @@ class NodeBoundary extends Component<{ node: RenderNode; children: ReactNode }, 
   }
 }
 
+const prefersReduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Run the section's choreographed behaviours (node.motion) on its wrapper element. */
+function useSectionMotion(node: RenderNode, reduced: boolean) {
+  const behaviors = node.motion ?? [];
+  const key = JSON.stringify(behaviors);
+  useEffect(() => {
+    if (!behaviors.length) return;
+    const el = document.querySelector<HTMLElement>(`[data-node="${CSS.escape(node.id)}"]`);
+    return el ? attachMotion(el, behaviors, reduced || prefersReduced()) : undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, key, reduced]);
+}
+
+/** Components that stay on screen while the page scrolls, and which edge they hold. */
+function stickyEdge(node: RenderNode): "top" | "bottom" | null {
+  const variant = node.props.variant as string | undefined;
+  if (node.implementation === "NavBar" && variant !== "transparent") return "top";
+  if (node.implementation === "StickyCtaBar") return "bottom";
+  return null;
+}
+
 function Node({ node, bp, reduced }: { node: RenderNode; bp: Breakpoint; reduced: boolean }) {
+  useSectionMotion(node, reduced);
   const Impl = COMPONENTS[node.implementation];
   if (!Impl) {
     const err = { node: node.id, implementation: node.implementation, message: "no implementation registered" };
@@ -49,22 +74,42 @@ function Node({ node, bp, reduced }: { node: RenderNode; bp: Breakpoint; reduced
     gap: typeof style.gap === "string" ? style.gap : undefined,
   };
   const inner = <NodeBoundary node={node}><Impl {...props} /></NodeBoundary>;
-  if (!node.animation) return <div data-node={node.id} data-semantic={node.semantic_type} style={tokenVars}>{inner}</div>;
+  // Each section sits in its own wrapper, so a sticky component can only stick if the wrapper is
+  // the sticky element: inside a box exactly its own height, position:sticky has nowhere to go.
+  const sticky = stickyEdge(node);
+  const wrapperStyle = sticky ? { ...tokenVars, position: "sticky" as const, [sticky]: 0, zIndex: 40 } : tokenVars;
+  if (!node.animation) return <div data-node={node.id} data-semantic={node.semantic_type} style={wrapperStyle}>{inner}</div>;
   return (
-    <Animated id={node.id} animation={node.animation} forceReduced={reduced} style={tokenVars}>{inner}</Animated>
+    <Animated id={node.id} animation={node.animation} forceReduced={reduced} style={wrapperStyle}>{inner}</Animated>
   );
 }
 
 export default function App() {
   const [model, setModel] = useState<RenderModel | undefined>(window.__uibModel);
+  const [version, setVersion] = useState(0);
   const [bp, setBp] = useState<Breakpoint>(currentBreakpoint(window.innerWidth));
 
   useEffect(() => {
+    // `uib view` opens `/?model=<url>`; the renderer pushes models with the uib:model event instead.
+    const src = new URLSearchParams(window.location.search).get("model");
+    if (src) fetch(src).then((r) => r.json()).then((m: RenderModel) => { document.title = m.screen_id; setModel(m); });
+  }, []);
+
+  useEffect(() => {
     const onResize = () => setBp(currentBreakpoint(window.innerWidth));
-    const onModel = (e: Event) => { window.__uibErrors = []; setModel((e as CustomEvent<RenderModel>).detail); };
+    // A new model remounts the tree: the motion runtime rewrites headline DOM, which must not be
+    // patched in place by React.
+    const onModel = (e: Event) => { window.__uibErrors = []; setVersion((v) => v + 1); setModel((e as CustomEvent<RenderModel>).detail); };
+    const uninstall = installGlobalMotion(() => !!window.__uibModel?.reduced_motion || prefersReduced());
     window.addEventListener("resize", onResize);
     window.addEventListener("uib:model", onModel as EventListener);
-    return () => { window.removeEventListener("resize", onResize); window.removeEventListener("uib:model", onModel as EventListener); };
+    window.addEventListener("uib:settle", settleAll);  // the renderer settles motion before capture
+    return () => {
+      uninstall();
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("uib:model", onModel as EventListener);
+      window.removeEventListener("uib:settle", settleAll);
+    };
   }, []);
 
   useEffect(() => {
@@ -81,5 +126,5 @@ export default function App() {
   }, [model, bp]);
 
   if (!model) return <div data-empty>Waiting for a render model…</div>;
-  return <div data-screen={model.screen_id} data-breakpoint={bp}><Node node={model.root} bp={bp} reduced={model.reduced_motion} /></div>;
+  return <div key={version} data-screen={model.screen_id} data-breakpoint={bp}><Node node={model.root} bp={bp} reduced={model.reduced_motion} /></div>;
 }

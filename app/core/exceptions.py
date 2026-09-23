@@ -43,6 +43,3 @@ class RenderError(UIBuilderError):
         super().__init__(message)
         self.stage = stage
         self.details = details or {}
-
-
-class IterationLimitExceeded(UIBuilderError): ...

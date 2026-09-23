@@ -37,6 +37,10 @@ class DesignSpec(StrictModel):
     visual_style: str
     theme: str
     density: Density = Density.comfortable
+    # Brand axes, named from the token registries; None falls back to the theme's defaults.
+    palette: str | None = None
+    typography: str | None = None
+    radius: str | None = None
     sections: list[SectionSpec] = Field(min_length=1)
     animation: AnimationIntent | None = None
 

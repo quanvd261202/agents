@@ -2,6 +2,7 @@ import asyncio
 import json
 import uuid
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -12,20 +13,212 @@ cli = typer.Typer(help="Agentic UI Builder")
 
 
 @cli.command()
-def run(requirement: str) -> None:
-    """Run the pipeline for a requirement (services wired in later phases)."""
+def run(
+    requirement: str,
+    yes: bool = typer.Option(False, "--yes", "-y", help="Accept every clarifying default"),
+    out: Path = typer.Option(Path("runs"), help="Each run writes its screens under out/<run id>"),
+) -> None:
+    """Run the pipeline for a requirement, answering clarifying questions along the way."""
     settings = get_settings()
     configure_logging(settings.log_level)
     from app.bootstrap import build_services
     from app.graph.builder import build_graph
 
-    graph = build_graph(build_services(settings))
-    state = asyncio.run(
-        graph.ainvoke(
-            {"run_id": str(uuid.uuid4()), "user_requirement": requirement, "iteration": 0}
+    async def go() -> dict[str, Any]:
+        graph = build_graph(await build_services(settings))
+        state: dict[str, Any] = {"run_id": str(uuid.uuid4()), "user_requirement": requirement}
+        # The clarifier may not ask twice once answers exist, so this is at most two passes.
+        while True:
+            state = await graph.ainvoke(state)
+            out = state.get("clarifier_output")
+            if out is None or out.status != "needs_clarification":
+                return state
+            state["user_answers"] = _answer(out.questions, yes)
+
+    state = asyncio.run(go())
+    run_dir = out / state["run_id"][:8]
+    failed = 0
+    for screen in state.get("screens") or []:
+        if screen.get("errors"):
+            failed += 1
+            typer.echo(f"{screen['screen'].id}: FAILED - {screen['errors'][-1]}", err=True)
+            continue
+        typer.echo(_save_screen(run_dir, screen))
+    if state.get("screens"):
+        typer.echo(f"\nwrote {run_dir}/")
+    if failed:
+        raise typer.Exit(1)
+
+
+def _save_screen(run_dir: Path, screen: dict[str, Any]) -> str:
+    """Spec, verification and screenshots for one screen; returns a one-line summary."""
+    import base64
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    spec, verification = screen["design_spec"], screen["verification_result"]
+    sid = spec.screen_id
+    (run_dir / f"{sid}.spec.json").write_text(spec.model_dump_json(indent=2, exclude_defaults=True))
+    (run_dir / f"{sid}.verification.json").write_text(verification.model_dump_json(indent=2))
+    for bp, shot in screen["render_result"].screenshots.items():
+        (run_dir / f"{sid}.{bp.value}.png").write_bytes(base64.b64decode(shot))
+    severities = [i.severity.value for i in verification.issues]
+    issues = ", ".join(f"{severities.count(s)} {s}" for s in ("critical", "major", "minor"))
+    fixes = screen.get("iteration", 0)
+    return f"{sid} ({spec.recipe}): {verification.status} after {fixes} fix(es); issues: {issues}"
+
+
+@cli.command()
+def view(
+    run_dir: Path | None = typer.Argument(None, help="A runs/<id> directory; default: the latest"),
+    port: int = typer.Option(8765, help="Local port to serve on"),
+) -> None:
+    """Open a run's screens, live and interactive, in the browser."""
+    import html
+    import tempfile
+    import webbrowser
+    from functools import partial
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+    from app.dsl import default_design_resolver
+    from app.models import DesignSpec
+    from app.renderer.server import FRONTEND_DIST
+
+    if run_dir is None:
+        runs = sorted(Path("runs").glob("*/"), key=lambda p: p.stat().st_mtime)
+        if not runs:
+            raise typer.BadParameter("no runs yet; `uib run` one first")
+        run_dir = runs[-1]
+    specs = sorted(run_dir.glob("*.spec.json"))
+    prebuilt = sorted(run_dir.glob("*.model.json"))  # `uib gallery` output
+    if not specs and not prebuilt:
+        raise typer.BadParameter(f"no *.spec.json or *.model.json in {run_dir}")
+
+    models = Path(tempfile.mkdtemp(prefix="uib-view-"))
+    resolver = default_design_resolver()
+    links = []
+    for path in specs:
+        spec = DesignSpec.model_validate_json(path.read_text())
+        (models / f"{spec.screen_id}.json").write_text(resolver.resolve(spec).model_dump_json())
+        name = html.escape(spec.screen_id)
+        links.append(
+            f'<li><a href="/?model=/models/{name}.json">{name}</a> '
+            f"<small>{html.escape(spec.recipe)}</small></li>"
         )
+    for path in prebuilt:
+        name = html.escape(path.name.removesuffix(".model.json"))
+        (models / f"{name}.json").write_text(path.read_text())
+        links.append(f'<li><a href="/?model=/models/{name}.json">{name}</a></li>')
+    (models / "index.html").write_text(
+        f"<!doctype html><title>{html.escape(run_dir.name)}</title>"
+        "<body style='font:16px system-ui;margin:40px'>"
+        f"<h1>Run {html.escape(run_dir.name)}</h1><ul>{''.join(links)}</ul></body>"
     )
-    typer.echo(state.get("clarifier_output"))
+
+    class Handler(SimpleHTTPRequestHandler):
+        def translate_path(self, path: str) -> str:
+            if path.startswith("/models/"):
+                return str(models / path.split("?")[0].removeprefix("/models/"))
+            return super().translate_path(path)
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(FRONTEND_DIST)))
+    url = f"http://127.0.0.1:{port}/models/index.html"
+    typer.echo(f"serving {run_dir} at {url} (Ctrl-C to stop)")
+    webbrowser.open(url)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+
+
+@cli.command()
+def gallery(
+    component: list[str] = typer.Option([], "--component", "-c", help="Only these component ids"),
+    category: str | None = typer.Option(None, help="Only this catalog category"),
+    palette: str = typer.Option("espresso", help="Palette to render under"),
+    typography: str = typer.Option("editorial_serif", help="Font pairing"),
+    radius: str = typer.Option("large", help="Radius personality"),
+    theme: str = typer.Option("modern_light", help="Base theme"),
+    out: Path = typer.Option(Path("gallery"), help="Screenshots and models land in out/<palette>/"),
+) -> None:
+    """Render every component x variant with the real renderer and report its checks."""
+    from app.catalog import default_component_registry
+    from app.dsl import default_design_resolver
+    from app.models.dsl import SectionSpec
+    from app.renderer import PlaywrightRenderer, StaticServer
+
+    configure_logging("WARNING")
+    comps = [
+        c
+        for c in default_component_registry()
+        if (not component or c.id in component) and (category is None or c.category == category)
+    ]
+    if not comps:
+        raise typer.BadParameter("no component matches")
+    resolver = default_design_resolver()
+    target = out / palette
+    target.mkdir(parents=True, exist_ok=True)
+
+    async def go() -> int:
+        blocking = 0
+        with StaticServer() as server:
+            renderer = PlaywrightRenderer(server=server, screenshot_dir=target)
+            for comp in comps:
+                model = resolver.preview(
+                    [
+                        SectionSpec(id=f"{comp.id}-{v}", type=comp.id, variant=v)
+                        for v in comp.variants
+                    ],
+                    screen_id=comp.id,
+                    theme=theme,
+                    palette=palette,
+                    typography=typography,
+                    radius=radius,
+                )
+                (target / f"{comp.id}.model.json").write_text(model.model_dump_json())
+                findings = (await renderer.render_with_findings(model)).findings
+                bad = [
+                    f
+                    for f in findings
+                    if f.severity == "critical"
+                    or (f.severity == "major" and f.dimension == "accessibility")
+                ]
+                blocking += len(bad)
+                mark = "FAIL" if bad else "ok  "
+                typer.echo(
+                    f"{mark} {comp.id} ({len(comp.variants)} variants, {len(findings)} findings)"
+                )
+                for f in bad:
+                    typer.echo(f"       [{f.severity.value}] {f.target}: {f.issue}")
+        return blocking
+
+    blocking = asyncio.run(go())
+    typer.echo(f"\n{len(comps)} components -> {target}/   (uib view {target})")
+    if blocking:
+        raise typer.Exit(1)
+
+
+def _answer(questions: list[Any], accept_defaults: bool) -> dict[str, str]:
+    answers: dict[str, str] = {}
+    for q in questions:
+        default = q.default or (q.options[0] if q.options else "")
+        if accept_defaults:
+            answers[q.question] = default
+            continue
+        typer.echo(q.question)
+        for i, option in enumerate(q.options, 1):
+            typer.echo(f"  {i}. {option}")
+        reply = typer.prompt("Answer (number or text)", default=default)
+        answers[q.question] = (
+            q.options[int(reply) - 1]
+            if reply.isdigit() and 0 < int(reply) <= len(q.options)
+            else reply
+        )
+    return answers
 
 
 def main() -> None:
@@ -78,7 +271,7 @@ def retrieve(
     pg: bool = typer.Option(False, "--pg", help="Use pgvector instead of the in-memory index"),
 ) -> None:
     """Show the compact context retrieval would hand the Design Builder."""
-    from app.models.direction import DesignDirection
+    from app.models.direction import DesignDirection, ScreenDirection
     from app.models.requirements import ClarifiedRequirements
     from app.retrieval import PgVectorRetrievalRepository, build_retrieval_service
 
@@ -106,8 +299,9 @@ def retrieve(
                 radius="large",
                 layout_strategy="grid",
                 animation="subtle",
-                recipe=recipe,
+                screens=[ScreenDirection(screen_id="page", recipe=recipe)],
             ),
+            recipe,
         )
         for label, lines in (
             ("recipes", ctx.recipes),

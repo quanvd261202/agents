@@ -11,7 +11,10 @@ class RecipeRegistry(BaseRegistry[RecipeDefinition]):
     not_found_error = UnknownRecipeError
 
     def for_domain(self, domain: str) -> list[RecipeDefinition]:
-        return self.filter(lambda r: "*" in r.domains or domain in r.domains)
+        """Recipes written for this domain. The generic `*` recipes are only a fallback: offering
+        a SaaS landing page to a shop that has its own storefront recipe invites the wrong pick."""
+        specific = self.filter(lambda r: domain in r.domains)
+        return specific or self.filter(lambda r: "*" in r.domains)
 
     def for_page_type(self, page_type: str) -> list[RecipeDefinition]:
         return self.filter(lambda r: r.page_type == page_type)

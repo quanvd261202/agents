@@ -83,14 +83,23 @@ class RecipeResolver:
         for s in spec.sections:
             rs = recipe.section(s.id)
             assert rs is not None
+            # Slot defaults were written for the slot's first component; a slot now offers several,
+            # so each default applies only when the chosen component can take it.
+            comp = self._components.get(s.type)
             update: dict[str, object] = {}
             if s.variant is None:
-                update["variant"] = (
-                    rs.default_variant or self._components.get(s.type).default_variant
-                )
-            if s.layout is None and rs.layout is not None:
+                fits = rs.default_variant in comp.variants
+                update["variant"] = rs.default_variant if fits else comp.default_variant
+            copy = {k: v for k, v in rs.content.items() if k in comp.slot_names()}
+            if copy:
+                update["content"] = {**copy, **s.content}
+            layout_fits = rs.layout is not None and (
+                not comp.supported_layouts or rs.layout.value in comp.supported_layouts
+            )
+            if s.layout is None and layout_fits:
                 from app.models.dsl import LayoutIntent
 
+                assert rs.layout is not None
                 update["layout"] = LayoutIntent(type=rs.layout.value)
             sections.append(s.model_copy(update=update) if update else s)
         return spec.model_copy(update={"sections": sections})

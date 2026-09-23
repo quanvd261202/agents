@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from app.core.exceptions import ConfigurationError, StructuredOutputError
+from app.core.exceptions import ConfigurationError, LLMError, StructuredOutputError
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -68,18 +68,36 @@ class FakeLLMProvider:
         return LLMResult(value=str(item), usage=LLMUsage(model="fake"))
 
 
+async def _call[R](call: Awaitable[R]) -> R:
+    """Provider SDK failures (rate limits, timeouts, auth) surface as the project's LLMError, so
+    the graph can fail one screen instead of the whole run."""
+    try:
+        return await call
+    except Exception as e:  # noqa: BLE001
+        raise LLMError(f"{type(e).__name__}: {e}") from e
+
+
 class OpenAILLMProvider:
     """LangChain-backed OpenAI provider. Imported lazily so tests need no API key."""
 
-    def __init__(self, model: str, temperature: float = 0.2, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        temperature: float = 0.2,
+        base_url: str | None = None,
+        api_key: str | None = None,
+    ) -> None:
         try:
             from langchain_openai import ChatOpenAI
         except ImportError as e:  # pragma: no cover
             raise ConfigurationError("langchain-openai is not installed") from e
         self._model_name = model
-        kwargs: dict[str, Any] = {"model": model, "temperature": temperature}
+        # Retries back off on 429s, honouring the server's retry-after.
+        kwargs: dict[str, Any] = {"model": model, "temperature": temperature, "max_retries": 6}
         if base_url:
             kwargs["base_url"] = base_url
+        if api_key:
+            kwargs["api_key"] = api_key
         self._chat = ChatOpenAI(**kwargs)
 
     @staticmethod
@@ -94,7 +112,7 @@ class OpenAILLMProvider:
         runnable = self._chat.with_structured_output(
             schema, method="json_schema", strict=True, include_raw=True
         )
-        out = await runnable.ainvoke(self._to_lc(messages))
+        out = await _call(runnable.ainvoke(self._to_lc(messages)))
         if not isinstance(out, dict):
             raise StructuredOutputError("structured output did not return a raw/parsed dict")
         parsed = out.get("parsed")
@@ -106,7 +124,7 @@ class OpenAILLMProvider:
         import time
 
         start = time.perf_counter()
-        out = await self._chat.ainvoke(self._to_lc(messages))
+        out = await _call(self._chat.ainvoke(self._to_lc(messages)))
         return LLMResult(value=str(out.content), usage=self._usage(out, start))
 
     def _usage(self, raw: Any, start: float) -> LLMUsage:
@@ -124,13 +142,16 @@ class OpenAILLMProvider:
 class AnthropicLLMProvider:
     """LangChain-backed provider. Imported lazily so tests need no API key."""
 
-    def __init__(self, model: str, temperature: float = 0.2) -> None:
+    def __init__(self, model: str, temperature: float = 0.2, api_key: str | None = None) -> None:
         try:
             from langchain_anthropic import ChatAnthropic
         except ImportError as e:  # pragma: no cover
             raise ConfigurationError("langchain-anthropic is not installed") from e
         self._model_name = model
-        self._chat = ChatAnthropic(model=model, temperature=temperature)
+        kwargs: dict[str, Any] = {"model": model, "temperature": temperature}
+        if api_key:
+            kwargs["api_key"] = api_key
+        self._chat = ChatAnthropic(**kwargs)
 
     @staticmethod
     def _to_lc(messages: Sequence[Message]) -> list[tuple[str, Any]]:
@@ -141,7 +162,7 @@ class AnthropicLLMProvider:
 
         start = time.perf_counter()
         runnable = self._chat.with_structured_output(schema, include_raw=True)
-        out = await runnable.ainvoke(self._to_lc(messages))
+        out = await _call(runnable.ainvoke(self._to_lc(messages)))
         if not isinstance(out, dict):
             raise StructuredOutputError("structured output did not return a raw/parsed dict")
         parsed = out.get("parsed")
@@ -161,7 +182,7 @@ class AnthropicLLMProvider:
         import time
 
         start = time.perf_counter()
-        out = await self._chat.ainvoke(self._to_lc(messages))
+        out = await _call(self._chat.ainvoke(self._to_lc(messages)))
         meta = getattr(out, "usage_metadata", None) or {}
         usage = LLMUsage(
             input_tokens=meta.get("input_tokens", 0),
@@ -176,12 +197,14 @@ class AnthropicLLMProvider:
 DEFAULT_MODELS = {"openai": "gpt-4o", "anthropic": "claude-sonnet-5", "fake": "fake"}
 
 
-def build_llm_provider(provider: str, model: str = "", base_url: str | None = None) -> LLMProvider:
+def build_llm_provider(
+    provider: str, model: str = "", base_url: str | None = None, api_key: str | None = None
+) -> LLMProvider:
     chosen = model or DEFAULT_MODELS.get(provider, "")
     if provider == "fake":
         return FakeLLMProvider()
     if provider == "openai":
-        return OpenAILLMProvider(model=chosen, base_url=base_url)
+        return OpenAILLMProvider(model=chosen, base_url=base_url, api_key=api_key)
     if provider == "anthropic":
-        return AnthropicLLMProvider(model=chosen)
+        return AnthropicLLMProvider(model=chosen, api_key=api_key)
     raise ConfigurationError(f"Unknown LLM provider: {provider}")

@@ -29,3 +29,15 @@ async def test_fake_provider_schema_mismatch():
         await llm.invoke_structured([], UXPlan)
     with pytest.raises(StructuredOutputError):
         await FakeLLMProvider().invoke_structured([], UXPlan)
+
+
+async def test_provider_sdk_errors_surface_as_llm_errors():
+    """A 429 or timeout must be a UIBuilderError so the graph fails one screen, not the run."""
+    from app.core.exceptions import LLMError
+    from app.core.llm import _call
+
+    async def rate_limited() -> None:
+        raise RuntimeError("Error code: 429")
+
+    with pytest.raises(LLMError, match="RuntimeError: Error code: 429"):
+        await _call(rate_limited())

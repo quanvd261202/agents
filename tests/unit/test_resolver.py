@@ -53,9 +53,13 @@ def test_page_animation_applies_to_sections_and_can_be_overridden(resolver):
     model = resolver.resolve(DesignSpec.model_validate(SAAS_LANDING))
     by_id = {n.id: n for n in _walk(model.root)}
     assert by_id["hero"].animation.name == "stagger"  # page default (subtle_stagger alias)
-    assert by_id["social_proof"].animation.name == "marquee"  # section override
-    assert by_id["metrics"].animation.config["component"] == "NumberTicker"
-    assert by_id["features"].animation.config["stagger"]["staggerChildren"] > 0  # 4 children
+    # Non-entrance picks are runtime behaviours; the section still enters with the page default.
+    assert [b.name for b in by_id["social_proof"].motion][0] == "marquee"
+    entrance = by_id["social_proof"].animation
+    assert entrance is not None and entrance.name in {"fade_up", "fade"}  # page default, degraded
+    assert "number_ticker" in {b.name for b in by_id["metrics"].motion}
+    # The choreographer staggers a grid's items on its own
+    assert "stagger" in {b.name for b in by_id["features"].motion}
 
 
 def test_recipe_layout_defaults_and_component_responsive_hints(resolver):
@@ -123,3 +127,31 @@ def test_unexpected_failure_is_structured(resolver, monkeypatch):
     monkeypatch.setattr(resolver._tokens, "resolve", lambda *a, **k: 1 / 0)
     with pytest.raises(ResolutionError):
         resolver.resolve(DesignSpec.model_validate(SAAS_LANDING))
+
+
+def test_preview_renders_sections_without_a_recipe_under_any_brand():
+    from app.dsl import default_design_resolver
+    from app.models.dsl import SectionSpec
+
+    model = default_design_resolver().preview(
+        [SectionSpec(id="hero-editorial", type="hero", variant="editorial")],
+        screen_id="gallery",
+        palette="noir",
+        typography="luxe_serif",
+        radius="none",
+    )
+    [hero] = model.root.children
+    assert (hero.implementation, hero.props["variant"]) == ("Hero", "editorial")
+    assert model.css_variables["--color-bg"] == "#0c0b0a"
+    assert "Cormorant" in model.css_variables["--typography-font-heading"]
+
+
+def test_preview_still_validates_variants():
+    import pytest as _pytest
+
+    from app.core.exceptions import ValidationError
+    from app.dsl import default_design_resolver
+    from app.models.dsl import SectionSpec
+
+    with _pytest.raises(ValidationError):
+        default_design_resolver().preview([SectionSpec(id="x", type="hero", variant="holographic")])

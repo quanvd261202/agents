@@ -9,7 +9,7 @@ from app.animation.registry import AnimationRegistry
 from app.core.exceptions import ValidationError
 from app.models.common import Intensity
 from app.models.dsl import AnimationIntent
-from app.models.render import ResolvedAnimation
+from app.models.render import MotionBehavior, ResolvedAnimation
 
 _EASE = [0.22, 1, 0.36, 1]
 
@@ -48,7 +48,10 @@ class MotionAnimationEngine:
             if p.blur_px:
                 initial["filter"], animate["filter"] = f"blur({p.blur_px}px)", "blur(0px)"
             if d.extra.get("clip"):
-                initial["clipPath"], animate["clipPath"] = "inset(0 0 100% 0)", "inset(0 0 0% 0)"
+                # A clip-path in `initial` stalls the whole animation - opacity included - so the
+                # section never appears. Keyframes on `animate` do play; `initial`'s opacity 0
+                # keeps the section hidden until the entrance runs.
+                animate["clipPath"] = ["inset(0% 0% 100% 0%)", "inset(0% 0% 0% 0%)"]
             cfg |= {"initial": initial, "animate": animate, "transition": transition}
             if d.supports_stagger and child_count > 1 and p.stagger_ms:
                 cfg["stagger"] = {"delayChildren": 0.05, "staggerChildren": p.stagger_ms / 1000}
@@ -140,6 +143,20 @@ class AnimationResolver:
             config=self._engine.compile(d, preset, child_count=child_count),
             reduced_motion_config=self._engine.compile_reduced(d, fallback),
         )
+
+    def definition(self, name: str) -> AnimationDefinition:
+        return self._reg.get(name)
+
+    def behavior(self, intent: AnimationIntent) -> MotionBehavior | None:
+        """A vocabulary entry as a runtime behaviour. Its parameters are the preset's non-default
+        fields, so a new vocabulary entry needs no engine code: the runtime reads the same names."""
+        d = self._reg.get(intent.name)
+        preset = d.presets.get(intent.intensity)
+        if d.id == "none" or preset is None or preset == IntensityPreset():
+            return None
+        defaults = IntensityPreset()
+        params = {k: v for k, v in preset.model_dump().items() if v != getattr(defaults, k)}
+        return MotionBehavior(name=d.id, params=params)
 
     def resolve_page_default(self, name: str, intensity: Intensity) -> ResolvedAnimation | None:
         return self.resolve(AnimationIntent(name=name, intensity=intensity))

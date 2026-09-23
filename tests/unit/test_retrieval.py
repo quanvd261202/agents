@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.exceptions import ConfigurationError
-from app.models.direction import DesignDirection
+from app.models.direction import DesignDirection, ScreenDirection
 from app.models.requirements import ClarifiedRequirements
 from app.retrieval import (
     HashingEmbeddingProvider,
@@ -31,7 +31,7 @@ ECOM_DIRECTION = DesignDirection(
     radius="large",
     layout_strategy="editorial_grid",
     animation="subtle",
-    recipe="ecommerce_product",
+    screens=[ScreenDirection(screen_id="detail", recipe="ecommerce_product")],
 )
 SAAS = ClarifiedRequirements(
     product="analytics dashboard",
@@ -47,7 +47,7 @@ SAAS_DIRECTION = DesignDirection(
     radius="large",
     layout_strategy="bento",
     animation="subtle",
-    recipe="dashboard",
+    screens=[ScreenDirection(screen_id="overview", recipe="dashboard")],
 )
 
 
@@ -122,8 +122,8 @@ async def test_exclude_ids(service):
 
 
 async def test_retrieve_builds_compact_context_per_domain(service):
-    ecom = await service.retrieve(ECOM, ECOM_DIRECTION)
-    saas = await service.retrieve(SAAS, SAAS_DIRECTION)
+    ecom = await service.retrieve(ECOM, ECOM_DIRECTION, "ecommerce_product")
+    saas = await service.retrieve(SAAS, SAAS_DIRECTION, "dashboard")
 
     assert ecom.recipes and saas.recipes
     assert all("product" not in line for line in saas.components)
@@ -137,21 +137,23 @@ async def test_budget_trims_and_always_keeps_a_recipe(service):
     tight = RetrievalService(
         service._embeddings, service._repository, RetrievalBudget(max_tokens=60)
     )
-    ctx = await tight.retrieve(ECOM, ECOM_DIRECTION)
+    ctx = await tight.retrieve(ECOM, ECOM_DIRECTION, "ecommerce_product")
     assert ctx.estimated_tokens <= 60 or len(ctx.components) == 1
     assert ctx.recipes
     assert estimate_tokens(ctx.components) < estimate_tokens(
-        (await service.retrieve(ECOM, ECOM_DIRECTION)).components
+        (await service.retrieve(ECOM, ECOM_DIRECTION, "ecommerce_product")).components
     )
 
 
 async def test_lessons_are_capped(service):
-    ctx = await service.retrieve(ECOM, ECOM_DIRECTION, lessons=[f"lesson {i}" for i in range(20)])
+    ctx = await service.retrieve(
+        ECOM, ECOM_DIRECTION, "ecommerce_product", lessons=[f"lesson {i}" for i in range(20)]
+    )
     assert len(ctx.lessons) <= RetrievalBudget().max_lessons
 
 
 async def test_context_exposes_ids_for_validation(service):
-    ctx = await service.retrieve(ECOM, ECOM_DIRECTION)
+    ctx = await service.retrieve(ECOM, ECOM_DIRECTION, "ecommerce_product")
     from app.catalog import default_component_registry
 
     reg = default_component_registry()

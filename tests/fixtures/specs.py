@@ -121,9 +121,80 @@ SETTINGS = {
     "animation": {"name": "none"},
 }
 
+ECOMMERCE_HOME = {
+    "screen_id": "home",
+    "recipe": "ecommerce_home",
+    "visual_style": "premium_modern",
+    "theme": "premium_light",
+    "density": "comfortable",
+    "sections": [
+        {"id": "navigation", "type": "navigation"},
+        {"id": "hero", "type": "hero", "variant": "split"},
+        {"id": "featured_products", "type": "product_grid", "variant": "premium"},
+        {"id": "testimonials", "type": "reviews", "animation": {"name": "stagger"}},
+        {"id": "brand_story", "type": "feature_bento"},
+        {"id": "trust_signals", "type": "trust_signals", "variant": "inline"},
+        {"id": "footer", "type": "footer"},
+    ],
+    "animation": {"name": "subtle", "intensity": "subtle"},
+}
+
+ECOMMERCE_LISTING = {
+    "screen_id": "listing",
+    "recipe": "ecommerce_listing",
+    "visual_style": "premium_modern",
+    "theme": "premium_light",
+    "density": "comfortable",
+    "sections": [
+        {"id": "navigation", "type": "navigation"},
+        {"id": "breadcrumb", "type": "breadcrumb"},
+        {"id": "filters", "type": "product_filters", "variant": "chips"},
+        {"id": "product_grid", "type": "product_grid", "animation": {"name": "stagger"}},
+        {"id": "footer", "type": "footer"},
+    ],
+    "animation": {"name": "subtle", "intensity": "subtle"},
+}
+
+ECOMMERCE_CART = {
+    "screen_id": "cart",
+    "recipe": "ecommerce_cart",
+    "visual_style": "premium_modern",
+    "theme": "premium_light",
+    "density": "comfortable",
+    "sections": [
+        {"id": "navigation", "type": "navigation"},
+        {"id": "cart_items", "type": "cart_items"},
+        {"id": "order_summary", "type": "order_summary"},
+        {"id": "trust_signals", "type": "trust_signals"},
+        {"id": "cross_sell", "type": "related_products", "variant": "grid"},
+        {"id": "footer", "type": "footer"},
+    ],
+    "animation": {"name": "subtle", "intensity": "subtle"},
+}
+
+ECOMMERCE_CHECKOUT = {
+    "screen_id": "checkout",
+    "recipe": "ecommerce_checkout",
+    "visual_style": "premium_modern",
+    "theme": "premium_light",
+    "density": "comfortable",
+    "sections": [
+        {"id": "navigation", "type": "navigation"},
+        {"id": "checkout_form", "type": "checkout_form", "variant": "express"},
+        {"id": "order_summary", "type": "order_summary", "variant": "compact"},
+        {"id": "trust_signals", "type": "trust_signals", "variant": "inline"},
+        {"id": "footer", "type": "footer"},
+    ],
+    "animation": {"name": "none"},
+}
+
 ALL = {
     "saas_landing": SAAS_LANDING,
+    "ecommerce_home": ECOMMERCE_HOME,
+    "ecommerce_listing": ECOMMERCE_LISTING,
     "ecommerce_product": ECOMMERCE_PRODUCT,
+    "ecommerce_cart": ECOMMERCE_CART,
+    "ecommerce_checkout": ECOMMERCE_CHECKOUT,
     "dashboard": DASHBOARD,
     "settings": SETTINGS,
 }

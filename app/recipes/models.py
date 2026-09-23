@@ -16,6 +16,7 @@ class RecipeSection(StrictModel):
     reorderable: bool = False  # may move within its reorder group
     reorder_group: str | None = None
     goal: str | None = None  # conversion/task goal this section serves
+    content: dict[str, str] = Field(default_factory=dict)  # default slot copy; the spec's wins
 
 
 class RecipeDefinition(StrictModel):

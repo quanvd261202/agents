@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import SecretStr
+
 from app.core.config import Settings
 from app.retrieval.embeddings import EmbeddingProvider, build_embedding_provider
 from app.retrieval.repository import InMemoryRetrievalRepository, RetrievalRepository
@@ -12,7 +14,12 @@ def build_embeddings(settings: Settings) -> EmbeddingProvider:
         settings.embedding_model,
         settings.embedding_dimensions,
         settings.llm_base_url,
+        _secret(settings.openai_api_key),
     )
+
+
+def _secret(value: SecretStr | None) -> str | None:
+    return value.get_secret_value() if value else None
 
 
 async def build_retrieval_service(

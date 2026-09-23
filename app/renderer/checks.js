@@ -49,14 +49,26 @@
   }
 
   /* 5. contrast (WCAG 2.1 AA) for visible text */
-  const parse = (c) => { const m = c.match(/[\d.]+/g); return m ? m.slice(0, 3).map(Number).concat(m[3] !== undefined ? Number(m[3]) : 1) : null; };
+  /* Any CSS colour syntax (rgb, oklab, oklch, color(srgb ...), color-mix results) -> [r, g, b, a].
+     Painting one pixel lets the browser do the conversion, so the check never misreads a modern
+     colour as rgb numbers. */
+  const ctx2d = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true });
+  const parseCache = new Map();
+  const parse = (c) => {
+    if (!c) return null;
+    if (parseCache.has(c)) return parseCache.get(c);
+    ctx2d.clearRect(0, 0, 1, 1); ctx2d.fillStyle = "#000"; ctx2d.fillStyle = c; ctx2d.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = ctx2d.getImageData(0, 0, 1, 1).data;
+    const out = [r, g, b, a / 255];
+    parseCache.set(c, out); return out;
+  };
   const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
     return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
   const bgOf = (el) => { let n = el; while (n && n !== document.documentElement) {
       const c = parse(getComputedStyle(n).backgroundColor); if (c && c[3] > 0.5) return c; n = n.parentElement; }
     return parse(getComputedStyle(document.body).backgroundColor) || [255, 255, 255, 1]; };
   const seen = new Set();
-  for (const el of document.querySelectorAll("p, h1, h2, h3, span, a, button, td, th, li, strong, label, summary, legend")) {
+  for (const el of document.querySelectorAll("p, h1, h2, h3, h4, h5, h6, span, a, button, td, th, li, strong, em, label, summary, legend, dt, dd, figcaption, blockquote, cite, small, output, time")) {
     if (!visible(el) || !el.textContent.trim()) continue;
     if ([...el.children].some((c) => c.textContent.trim() === el.textContent.trim())) continue;
     const s = getComputedStyle(el), fg = parse(s.color), bg = bgOf(el);
@@ -115,6 +127,22 @@
     if (el.getBoundingClientRect().height < 8 && !el.querySelector("[data-node]"))
       add("major", "layout", nodeId(el), "section renders with almost no height", "check that the component received content", {});
   }
+
+  /* 9. motion: layout stability, main-thread cost, and the continuous-animation budget */
+  const perf = window.__uibPerf;
+  if (perf && perf.cls > 0.1)
+    add("major", "layout", "page", `cumulative layout shift ${perf.cls.toFixed(3)} exceeds 0.1`,
+        "reserve space for content that loads or animates in", { cls: perf.cls });
+  if (perf && perf.longTaskMs > 400)
+    add("minor", "ux", "page", `the main thread was blocked for ${Math.round(perf.longTaskMs)}ms while loading`,
+        "reduce the script and animation work done on load", { longTaskMs: perf.longTaskMs });
+  const marquees = new Set(document.getAnimations()
+    .filter((a) => a.animationName === "uib-marquee" && a.playState === "running")
+    .map((a) => a.effect && a.effect.target && a.effect.target.parentElement)).size;
+  const loops = ((window.__uibMotion && window.__uibMotion.peakContinuous) || 0) + marquees;
+  if (loops > 4)
+    add("major", "ux", "page", `${loops} continuous animations run at once (budget 4)`,
+        "keep ambient motion to one or two per page", { loops });
 
   return {
     findings: out,

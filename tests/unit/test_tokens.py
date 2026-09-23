@@ -21,7 +21,7 @@ def test_inheritance_merges_leaf_over_parent(resolver):
     assert t.get("color.bg") == "#050505"  # leaf
     assert t.get("color.muted") == "#a1a1aa"  # from modern_dark
     assert t.get("color.primary_fg") == "#050505"  # leaf overrides modern_light
-    assert t.get("shadow.sm") == "0 1px 2px rgb(0 0 0 / 0.05)"  # from base
+    assert t.get("shadow.sm") == "0 1px 2px 0px rgb(0 0 0 / 0.21)"  # stronger on a dark bg
 
 
 def test_all_seed_themes_resolve_with_every_density(resolver):
@@ -73,3 +73,98 @@ def test_defaults_present_and_cycle_detected():
     t = TokenResolver(default_theme_registry()).resolve("minimal")
     assert t.get("motion.duration_base") == "300ms"
     assert t.get("border.width") == "1.5px"
+
+
+# --- tokens v2: palettes, fluid type, radius roles ----------------------------------------
+def test_every_palette_meets_wcag_aa_for_every_checked_pair():
+    from app.tokens.palettes import CONTRAST_PAIRS, contrast, default_palette_registry
+
+    for p in default_palette_registry():
+        for fg, bg, need in CONTRAST_PAIRS:
+            assert contrast(p.colors[fg], p.colors[bg]) >= need, (p.id, fg, bg)
+
+
+def test_an_unreadable_palette_cannot_be_built():
+    from pydantic import ValidationError as PydanticError
+
+    from app.tokens.palettes import PALETTES, Palette
+
+    good = PALETTES[0].model_dump()
+    with pytest.raises(PydanticError, match="fails WCAG AA"):
+        Palette.model_validate({**good, "colors": {**good["colors"], "muted": "#dddddd"}})
+
+
+def test_a_palette_replaces_the_theme_colours_and_tints_shadows(resolver):
+    t = resolver.resolve("modern_light", palette="espresso")
+    assert t.get("color.bg") == "#f7f1e8"
+    assert t.get("color.media_a") == "#c9a27e"  # roles the theme never had
+    assert "59 37 24" in str(t.get("shadow.md"))
+
+
+def test_type_scale_is_fluid_from_phone_to_desktop(resolver):
+    from app.tokens.resolver import fluid_size
+
+    t = resolver.resolve("modern_light", typography="editorial_serif")
+    assert t.get("typography.size_body") == "1rem"
+    assert str(t.get("typography.size_display")).startswith("clamp(")
+    # a larger ratio means a more dramatic desktop headline; phones stay the same size
+    tight, loud = fluid_size(6, 1.25), fluid_size(6, 1.5)
+    assert tight.split(",")[0] == loud.split(",")[0]
+    assert float(loud.rsplit(" ", 1)[-1].rstrip("rem)")) > float(
+        tight.rsplit(" ", 1)[-1].rstrip("rem)")
+    )
+
+
+def test_radius_roles_share_one_personality(resolver):
+    soft = resolver.resolve("modern_light", radius="large")
+    assert (soft.get("radius.card"), soft.get("radius.lg"), soft.get("radius.button")) == (
+        "16px",
+        "24px",
+        "16px",
+    )
+    assert resolver.resolve("modern_light", radius="full").get("radius.button") == "9999px"
+    assert resolver.resolve("modern_light", radius="none").get("radius.media") == "0px"
+
+
+def test_brand_axes_on_a_spec_reach_the_rendered_css():
+    from app.dsl import default_design_resolver
+    from app.models import DesignSpec
+    from tests.fixtures.specs import ALL
+
+    spec = DesignSpec.model_validate(
+        {
+            **ALL["ecommerce_home"],
+            "palette": "matcha",
+            "typography": "grotesk_display",
+            "radius": "full",
+        }
+    )
+    css = default_design_resolver().resolve(spec).css_variables
+    assert css["--color-primary"] == "#2f4a2a"
+    assert "Bricolage" in css["--typography-font-heading"]
+    assert css["--radius-button"] == "9999px"
+
+
+def test_every_theme_without_a_palette_meets_the_same_contrast_rule(resolver):
+    """A spec may name a theme and no palette; its colours must be as readable as a palette's
+    and define every role the components use."""
+    from app.tokens.palettes import CONTRAST_PAIRS, ROLES, contrast
+
+    failures = []
+    for theme in default_theme_registry():
+        if theme.id == "base":
+            continue
+        colors = {
+            k.removeprefix("color."): str(v)
+            for k, v in resolver.resolve(theme.id).values.items()
+            if k.startswith("color.")
+        }
+        missing = [r for r in ROLES if r not in colors]
+        if missing:
+            failures.append(f"{theme.id}: missing {missing}")
+            continue
+        for fg, bg, need in CONTRAST_PAIRS:
+            ratio = contrast(colors[fg], colors[bg])
+            if ratio < need:
+                failures.append(f"{theme.id}: {fg}/{bg} {ratio:.2f} < {need}")
+    assert not failures, failures

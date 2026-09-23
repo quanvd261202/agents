@@ -7,15 +7,17 @@ from dataclasses import dataclass
 from app.animation import AnimationResolver
 from app.catalog import ComponentDefinition, ComponentRegistry
 from app.core.exceptions import ResolutionError, ValidationError
+from app.dsl.choreography import allowed_motion, choreograph
 from app.layout import LayoutResolver, LayoutSpec, LayoutType
-from app.models.common import Breakpoint, Intensity
+from app.models.common import Breakpoint, Density, Intensity
 from app.models.dsl import AnimationIntent, DesignSpec, LayoutIntent, SectionSpec
-from app.models.render import RenderModel, RenderNode, ResolvedLayout
+from app.models.render import MotionBehavior, RenderModel, RenderNode, ResolvedLayout
 from app.recipes import RecipeResolver
 from app.tokens import TokenResolver
+from app.tokens.resolver import ResolvedTokens
 
 # Design-direction words the LLM may use, mapped to a page-level animation vocabulary entry.
-_PAGE_ANIMATION_ALIASES: dict[str, tuple[str, Intensity]] = {
+PAGE_ANIMATION_ALIASES: dict[str, tuple[str, Intensity]] = {
     "subtle_stagger": ("stagger", Intensity.subtle),
     "subtle_expressive": ("fade_up", Intensity.moderate),
     "subtle": ("fade_up", Intensity.subtle),
@@ -57,12 +59,19 @@ class DesignResolver:
     def _resolve(self, spec: DesignSpec, reduced_motion: bool) -> RenderModel:
         spec = self._recipes.resolve(spec)  # recipe expansion + defaults + hierarchy validation
         recipe = self._recipes._validator._recipes.get(spec.recipe)
-        tokens = self._tokens.resolve(spec.theme, density=spec.density)
+        tokens = self._tokens.resolve(
+            spec.theme,
+            density=spec.density,
+            palette=spec.palette,
+            typography=spec.typography,
+            radius=spec.radius,
+        )
         ctx = ResolverContext(
             reduced_motion=reduced_motion, page_animation=self._page_animation(spec.animation)
         )
 
         children = self._compose_shell(recipe.shell, spec.sections, ctx)
+        page_intensity = ctx.page_animation.intensity if ctx.page_animation else Intensity.subtle
         shell = self._layouts.resolve(
             LayoutSpec(type=recipe.shell, gap="none", padding="none", max_width="full"),
             child_count=len(children),
@@ -79,13 +88,52 @@ class DesignResolver:
                 "density": str(spec.density),
             },
         )
+        choreograph(root, page_intensity, self._animations)
+        return self._model(spec.screen_id, spec.theme, tokens, root, reduced_motion)
+
+    def preview(
+        self,
+        sections: list[SectionSpec],
+        *,
+        screen_id: str = "preview",
+        theme: str = "modern_light",
+        palette: str | None = None,
+        typography: str | None = None,
+        radius: str | None = None,
+        density: Density = Density.comfortable,
+        intensity: Intensity = Intensity.moderate,
+    ) -> RenderModel:
+        """Render sections without a recipe: the component gallery and visual review use this.
+        Components, variants, slots and tokens are validated exactly as in a real page."""
+        tokens = self._tokens.resolve(
+            theme, density=density, palette=palette, typography=typography, radius=radius
+        )
+        ctx = ResolverContext()
+        children = [self._resolve_section(s, ctx, parent_layout=LayoutType.stack) for s in sections]
+        root = RenderNode(
+            id="page",
+            semantic_type="page",
+            implementation="Page",
+            layout=self._layouts.resolve(
+                LayoutSpec(type=LayoutType.stack, gap="none", padding="none", max_width="full"),
+                child_count=len(children),
+            ),
+            children=children,
+        )
+        choreograph(root, intensity, self._animations)
+        return self._model(screen_id, theme, tokens, root, reduced_motion=False)
+
+    @staticmethod
+    def _model(
+        screen_id: str, theme: str, tokens: ResolvedTokens, root: RenderNode, reduced_motion: bool
+    ) -> RenderModel:
         css = tokens.css_variables()
         for bp in Breakpoint:
             for k, v in tokens.css_variables_for(bp).items():
                 css[f"{k}@{bp.value}"] = v
         return RenderModel(
-            screen_id=spec.screen_id,
-            theme=spec.theme,
+            screen_id=screen_id,
+            theme=theme,
             css_variables=css,
             root=root,
             reduced_motion=reduced_motion,
@@ -143,9 +191,22 @@ class DesignResolver:
         children = [self._resolve_section(c, ctx, parent_layout=layout_type) for c in s.children]
 
         animation = None
-        if s.animation is not None:  # explicit: must be supported
+        motion: list[MotionBehavior] = []
+        explicit = s.animation
+        if (
+            explicit is not None
+            and self._animations.definition(explicit.name).category != "entrance"
+        ):
+            # A behaviour (parallax, count-up, magnetic...) rather than an entrance: validated
+            # against the component, run by the motion runtime, and the section still enters
+            # with the page default.
+            self._animations.resolve(explicit, allowed=allowed_motion(comp))
+            if (b := self._animations.behavior(explicit)) is not None:
+                motion.append(b)
+            explicit = None
+        if explicit is not None:  # explicit entrance: must be supported
             animation = self._animations.resolve(
-                s.animation, child_count=max(len(children), 1), allowed=comp.animation_capabilities
+                explicit, child_count=max(len(children), 1), allowed=allowed_motion(comp)
             )
         elif ctx.page_animation is not None:  # page default: degrade to what the component supports
             intent = ctx.page_animation
@@ -167,6 +228,7 @@ class DesignResolver:
             tokens=self._component_tokens(comp),
             layout=layout,
             animation=animation,
+            motion=motion,
             children=children,
         )
 
@@ -228,7 +290,7 @@ class DesignResolver:
     def _page_animation(intent: AnimationIntent | None) -> AnimationIntent | None:
         if intent is None:
             return None
-        alias = _PAGE_ANIMATION_ALIASES.get(intent.name)
+        alias = PAGE_ANIMATION_ALIASES.get(intent.name)
         if alias is None:
             return intent
         name, default_intensity = alias

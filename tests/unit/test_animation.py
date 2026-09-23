@@ -70,3 +70,22 @@ def test_all_definitions_compile_for_all_intensities(res):
     for d in default_animation_registry():
         for i in ("none", "subtle", "moderate", "expressive"):
             res.resolve(AnimationIntent(name=d.id, intensity=i), child_count=3)
+
+
+def test_reveal_clips_via_keyframes_and_never_via_initial():
+    """A clip-path in `initial` stalls the whole entrance in the browser, opacity included, so the
+    section stays invisible. Keyframes on `animate` are the only form that plays."""
+    from app.animation import AnimationResolver, default_animation_registry
+    from app.models.common import Intensity
+    from app.models.dsl import AnimationIntent
+
+    resolved = AnimationResolver(default_animation_registry()).resolve(
+        AnimationIntent(name="reveal", intensity=Intensity.moderate)
+    )
+    assert resolved is not None
+    assert "clipPath" not in resolved.config["initial"]
+    assert resolved.config["initial"]["opacity"] == 0.0  # what hides it until the entrance runs
+    assert resolved.config["animate"]["clipPath"] == [
+        "inset(0% 0% 100% 0%)",
+        "inset(0% 0% 0% 0%)",
+    ]

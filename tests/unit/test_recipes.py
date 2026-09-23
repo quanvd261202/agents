@@ -119,6 +119,75 @@ def test_unknown_recipe(resolver):
 
 def test_domain_filter():
     assert {r.id for r in default_recipe_registry().for_domain("ecommerce")} == {
-        "saas_landing",
+        "brand_page",
+        "ecommerce_home",
+        "ecommerce_listing",
         "ecommerce_product",
+        "ecommerce_cart",
+        "ecommerce_checkout",
     }
+
+
+def test_generic_recipes_are_the_fallback_for_an_unserved_domain():
+    reg = default_recipe_registry()
+    assert [r.id for r in reg.for_domain("blog")] == ["saas_landing", "brand_page"]
+    assert "saas_landing" in {r.id for r in reg.for_domain("saas")}  # claims saas explicitly
+
+
+def test_recipe_copy_fills_empty_slots_and_the_spec_wins():
+    from app.catalog import default_component_registry
+    from app.models import DesignSpec
+    from app.recipes.resolver import RecipeResolver
+    from tests.fixtures.specs import ECOMMERCE_HOME
+
+    spec = DesignSpec.model_validate(ECOMMERCE_HOME)
+    spec = spec.model_copy(
+        update={
+            "sections": [
+                s.model_copy(update={"content": {"headline": "Beans, roasted Tuesday"}})
+                if s.id == "hero"
+                else s
+                for s in spec.sections
+            ]
+        }
+    )
+    out = RecipeResolver(default_recipe_registry(), default_component_registry()).resolve(spec)
+    assert out.find("navigation").content["actions"] == "Cart"  # shop nav, not "Get started"
+    hero = out.find("hero").content
+    assert hero["headline"] == "Beans, roasted Tuesday"  # the spec's own copy wins
+    assert hero["primary_cta"] == "Shop now"  # the recipe fills what the spec left empty
+
+
+def test_every_component_a_recipe_offers_resolves_in_that_slot():
+    """A slot may carry a layout (e.g. bento); a component offered there that cannot take that
+    layout would only fail at render time, on a page an agent already built."""
+    from app.catalog import default_component_registry
+    from app.dsl import default_design_resolver
+    from app.models import DesignSpec
+    from app.models.dsl import SectionSpec
+    from app.recipes.resolver import RecipeResolver
+
+    recipes = default_recipe_registry()
+    scaffold = RecipeResolver(recipes, default_component_registry())
+    resolver = default_design_resolver()
+    failures = []
+    for recipe in recipes:
+        base = scaffold.scaffold(recipe.id)
+        for slot in recipe.sections:
+            for comp in slot.component_types:
+                sections = [s for s in base if s.id != slot.id]
+                order = [s.id for s in recipe.sections]
+                sections.append(SectionSpec(id=slot.id, type=comp))
+                sections.sort(key=lambda s: order.index(s.id))
+                spec = DesignSpec(
+                    screen_id="s",
+                    recipe=recipe.id,
+                    visual_style="v",
+                    theme="modern_light",
+                    sections=sections,
+                )
+                try:
+                    resolver.resolve(spec)
+                except Exception as e:  # noqa: BLE001 - collect every failure, then report
+                    failures.append(f"{recipe.id}.{slot.id} <- {comp}: {e}")
+    assert not failures, "\n".join(failures)
