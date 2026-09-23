@@ -54,7 +54,7 @@ def run(
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
         if (site := state.get("site_model")) is not None:
-            (run_dir / "site.json").write_text(site.model_dump_json())
+            (run_dir / "site.json").write_text(site.model_dump_json(), encoding="utf-8")
         typer.echo("\n" + format_summary(summary))
         typer.echo(f"\nwrote {run_dir}/")
     if not summary["accepted"]:
