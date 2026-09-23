@@ -44,6 +44,18 @@ async () => {
 }
 """
 
+# Photographs load from the network; a capture before they arrive would show their placeholders.
+_IMAGES_JS = """
+async () => {
+  const pending = [...document.images].filter((img) => !img.complete);
+  const settled = (img) => new Promise((r) => {
+    img.addEventListener("load", r, { once: true });
+    img.addEventListener("error", r, { once: true });
+  });
+  await Promise.race([Promise.all(pending.map(settled)), new Promise((r) => setTimeout(r, 8000))]);
+}
+"""
+
 # Installed before the page loads: layout shift and long tasks are only observable from the start.
 _PERF_JS = """
 window.__uibPerf = { cls: 0, longTaskMs: 0 };
@@ -147,6 +159,7 @@ class PlaywrightRenderer:
                 await page.evaluate(_DISPATCH_JS, payload)
                 await page.wait_for_function("window.__uibReady === true", timeout=15_000)
                 await page.evaluate("document.fonts ? document.fonts.ready : true")
+                await page.evaluate(_IMAGES_JS)
                 await page.evaluate(_SETTLE_JS)
                 raw = await page.evaluate(CHECKS_JS)
                 outline[bp] = raw["outline"]

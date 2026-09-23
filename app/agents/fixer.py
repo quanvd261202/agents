@@ -6,6 +6,7 @@ from typing import Literal
 
 from app.agents.base import Agent
 from app.agents.verifier import BLOCKING
+from app.catalog.models import ComponentDefinition
 from app.catalog.registry import ComponentRegistry
 from app.core.exceptions import UIBuilderError, ValidationError
 from app.core.llm import LLMProvider
@@ -158,6 +159,8 @@ class FixerAgent(Agent):
                 raise ValidationError(f"no section '{p.target}'", target=p.target)
             layout_default = self._slot_layout(spec, p.target)
             sections = _patch(spec.sections, p.target, p.property, value, spec, layout_default)
+            if p.property == "type":
+                sections = _prune(sections, p.target, self._components.get(value))
             spec = spec.model_copy(update={"sections": sections})
         return spec
 
@@ -176,6 +179,28 @@ def _to_result(out: FixerOutput) -> FixResult:
 
 def _walk(sections: list[SectionSpec]) -> list[SectionSpec]:
     return [x for s in sections for x in (s, *_walk(s.children))]
+
+
+def _prune(
+    sections: list[SectionSpec], target: str, comp: ComponentDefinition
+) -> list[SectionSpec]:
+    """A section that changed component keeps only the copy, photographs and product cards its
+    new component can show; the rest would make the patched spec unresolvable."""
+    out: list[SectionSpec] = []
+    for s in sections:
+        if s.id == target:
+            slots = comp.slot_names()
+            s = s.model_copy(
+                update={
+                    "content": {k: v for k, v in s.content.items() if k in slots},
+                    "images": {k: v for k, v in s.images.items() if k in slots},
+                    "children": [c for c in s.children if c.type in comp.allowed_children],
+                }
+            )
+        elif s.children:
+            s = s.model_copy(update={"children": _prune(s.children, target, comp)})
+        out.append(s)
+    return out
 
 
 def _patch(

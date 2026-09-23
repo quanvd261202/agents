@@ -7,9 +7,10 @@ See `agentic-ui-builder-phase-prompts.md` for the full phase spec.
 ## Status
 
 Phases 01-15 complete and running end to end: foundation, all static registries, retrieval, the
-LLM agent chain (Clarifier -> UX Planner -> Design Director -> Compact Design Builder), the
-deterministic resolver (`DesignSpec` -> `RenderModel`), the browser renderer with deterministic
-checks, the screenshot Verifier and the targeted Fixer. Learning (16) is next.
+LLM agent chain (Clarifier -> UX Planner -> Design Director -> Compact Design Builder ->
+Copywriter), imagery, the deterministic resolver (`DesignSpec` -> `RenderModel`), the browser
+renderer with deterministic checks, the screenshot Verifier and the targeted Fixer. Learning (16)
+is next.
 
     uib run -y "An online shop selling specialty coffee beans and loose-leaf tea"
 
@@ -57,9 +58,27 @@ Add-to-cart flights, sliding option chips, tab crossfades and toggle pops are pa
 motion runs none of it; the renderer dispatches `uib:settle` so captures show every section at
 rest, and the checks report layout shift, main-thread blocking and more than four continuous loops.
 
+**Content (M10).** The Builder owns structure; a Copywriter then writes the words for each screen.
+It is shown the built sections with every slot the component can show (and its format note) and
+returns copy per slot, plus `items` for sections that list products, which become `product_card`
+children with real names, notes, prices and badges. It can only add `content`: the output schema
+has no types, variants or layouts. Copy lands in `SectionSpec.content`, the same channel recipe
+defaults and the frontend's `prop(node, slot, fallback)` already use, so a slot the writer skips
+keeps the component's own default. Placeholder text (lorem ipsum, "Product 1") and unknown slots
+are handed back to the model with the exact error.
+
+Image slots (`media`, `image`) hold a description of the photograph to find, not a keyword. After
+the copy is written the imagery service searches a stock library (Pexels, `PEXELS_API_KEY`) once
+per distinct description, keeps the results for the run, never repeats a photo on one page and
+stores the URLs in `SectionSpec.images` so a saved spec re-renders identically. The renderer waits
+for the photographs before it captures. A description that finds nothing, or a provider outage,
+leaves the art-directed placeholder in place: a missing photo never fails a screen. Set
+`UIB_IMAGE_PROVIDER=none` to keep the placeholders.
+
 Every planned screen is built. Clarifier, Planner and Director run once per product; the Director
 assigns each planned screen a recipe (`DesignDirection.screens`), and the graph fans out one
-retrieval -> build -> resolve -> render -> verify/fix subgraph per screen. Results land in
+retrieval -> build -> write -> illustrate -> resolve -> render -> verify/fix subgraph per screen.
+Results land in
 `state["screens"]` in plan order, each with its own fix loop. Ecommerce is covered end to end by
 `ecommerce_home`, `ecommerce_listing`, `ecommerce_product`, `ecommerce_cart` and
 `ecommerce_checkout`.
@@ -78,6 +97,8 @@ footer) is filled in deterministically rather than sent back.
 **Providers.** OpenAI is the default for both chat and embeddings; Anthropic is also wired.
 Set `UIB_LLM_PROVIDER` / `UIB_EMBEDDING_PROVIDER`. Leaving `UIB_LLM_MODEL` empty takes the
 provider default. `UIB_EMBEDDING_PROVIDER=hashing` runs retrieval offline with no API key.
+Photographs come from `UIB_IMAGE_PROVIDER` (`pexels` with a free `PEXELS_API_KEY`, `fake` for
+deterministic test URLs, `none` for the placeholders).
 
 ## Layout
 
@@ -87,7 +108,8 @@ app/
   models/     Pydantic models for every stage; models/dsl.py is the central DesignSpec contract
   services/   service + repository Protocols, DI container (Services)
   graph/      AgentState, thin LangGraph nodes, graph builder with conditional routing
-  agents/     Phase 07-10, 14, 15 (LLM agents)
+  agents/     Phase 07-10, 14, 15 (LLM agents) and the M10 Copywriter
+  imagery/    M10 stock photo providers (Pexels, fake) and the service that fills image slots
   catalog/    Phase 02 semantic component registry + implementation mappings (data/components.py)
   tokens/     Phase 03 themes with inheritance, TokenResolver (intent -> CSS variables)
   layout/     Phase 04 layout grammar: LayoutSpec, nesting/ratio/column validation, responsive resolver
@@ -103,7 +125,7 @@ app/
 ```
 
 Rules enforced by `import-linter`: `app.dsl`, `app.layout`, `app.animation`, `app.catalog`, `app.tokens`,
-`app.recipes`, `app.renderer` may never import the LLM layer.
+`app.recipes`, `app.renderer`, `app.imagery` may never import the LLM layer.
 
 All registries share `app.core.registry.BaseRegistry` (register/get/exists/list/filter, duplicate-id guard).
 
@@ -158,7 +180,7 @@ uib render spec.json --out screenshots
 START → clarifier ─(needs_clarification)→ END
               └─(ready)→ planner → design_director ─(one Send per planned screen)→ screen → END
 
-screen:  retrieval → design_builder → resolver → renderer → verifier ─(pass)→ finalize
+screen:  retrieval → design_builder → copywriter → imagery → resolver → renderer → verifier ─(pass)→ finalize
                                                   └─(needs_fix, budget left)→ fixer ─(success)→ resolver
                                                   └─(needs_fix, budget spent)→ finalize
                                                                      fixer ─(failure)→ finalize

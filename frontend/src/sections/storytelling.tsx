@@ -4,14 +4,10 @@ import {
   ArrowRight, AtSign, Check, Clock, Compass, Globe, Mail, PackageCheck, Pause, Play, Quote, RefreshCw, Sparkles, X,
   type LucideIcon,
 } from "lucide-react";
-import { Badge, Button, Eyebrow, Marquee, Media, Rating, Section, SectionHeader, Tabs, listProp, prop, variantOf } from "../ui";
+import { Badge, Button, Eyebrow, Marquee, Media, Rating, Section, SectionHeader, Tabs, imageAt, listProp, prop, subjectOf, variantOf, type Subject } from "../ui";
 import { cn } from "../lib/cn";
 import type { NodeProps, SectionMap } from "./types";
 
-type Subject = Parameters<typeof Media>[0]["subject"];
-const SUBJECTS = ["cup", "bag", "leaf", "glass", "abstract", "person", "space", "device", "chart", "product"];
-const subjectOf = (value: string, fallback: Subject): Subject =>
-  (SUBJECTS.includes(value) ? value : fallback) as Subject;
 /** Item i of a list slot, cycling so parallel lists of different lengths never render empty. */
 const at = (list: string[], i: number) => list[i % list.length];
 const pad2 = (i: number) => String(i + 1).padStart(2, "0");
@@ -42,6 +38,7 @@ function TestimonialSpotlight({ node }: NodeProps) {
   const company = prop(node, "company", "Maison Okafor");
   const rating = Number.parseFloat(prop(node, "rating", "5")) || 5;
   const subject = subjectOf(prop(node, "media", ""), "person");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", `Portrait of ${name}`);
   const eyebrow = prop(node, "eyebrow", "In their words");
 
@@ -51,7 +48,7 @@ function TestimonialSpotlight({ node }: NodeProps) {
         <figure className="mx-auto flex max-w-4xl flex-col items-center text-center">
           <Rating value={rating} />
           <blockquote className="mt-8 font-heading-set text-h3 text-balance md:text-h2">“{quote}”</blockquote>
-          <Media ratio="1/1" subject={subject} tone={1} label={label} zoom={false}
+          <Media ratio="1/1" subject={subject} src={src} tone={1} label={label} zoom={false}
             className="mt-10 w-20 rounded-pill border-4 border-bg shadow-md" />
           <div className="mt-5"><Attribution name={name} role={role} company="" align="center" /></div>
           {company && <p className="mt-6 text-caption font-semibold uppercase tracking-[0.24em] text-muted">{company}</p>}
@@ -74,7 +71,7 @@ function TestimonialSpotlight({ node }: NodeProps) {
             <div className="mt-10 border-t border-border pt-8"><Attribution name={name} role={role} company={company} /></div>
           </div>
           <div className="flex items-end lg:col-span-3">
-            <Media ratio="3/4" subject={subject} tone={2} label={label} className="max-w-40 shadow-xl sm:max-w-56 lg:max-w-none" />
+            <Media ratio="3/4" subject={subject} src={src} tone={2} label={label} className="max-w-40 shadow-xl sm:max-w-56 lg:max-w-none" />
           </div>
         </figure>
       </Section>
@@ -84,7 +81,7 @@ function TestimonialSpotlight({ node }: NodeProps) {
     <Section label="Testimonial" size="lg">
       <figure className="grid items-center gap-10 md:grid-cols-12 lg:gap-16">
         <div className="relative md:col-span-5">
-          <Media ratio="4/5" subject={subject} tone={0} label={label} className="shadow-xl" />
+          <Media ratio="4/5" subject={subject} src={src} tone={0} label={label} className="shadow-xl" />
           <div className="absolute -bottom-5 right-5 rounded-card bg-bg px-5 py-4 shadow-lg">
             <Rating value={rating} />
             <p className="mt-1 text-caption text-muted">{prop(node, "rating_note", "Verified customer since 2021")}</p>
@@ -381,7 +378,7 @@ function VideoShowcase({ node }: NodeProps) {
   const cinematic = variant === "cinematic";
 
   const poster = (
-    <Media ratio={cinematic ? "2/1" : "16/10"} subject={subjectOf(prop(node, "media", ""), "space")} tone={cinematic ? 3 : 1}
+    <Media ratio={cinematic ? "2/1" : "16/10"} subject={subjectOf(prop(node, "media", ""), "space")} src={imageAt(node, "media")?.url} tone={cinematic ? 3 : 1}
       label={prop(node, "media_label", `Poster frame from ${title}`)} className="shadow-xl">
       <div className="absolute inset-0 grid place-items-center">
         <button type="button" aria-label={`${playing ? "Pause" : "Play"}: ${title}`} aria-pressed={playing} onClick={() => setPlaying((p) => !p)}

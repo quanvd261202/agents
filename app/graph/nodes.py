@@ -75,6 +75,19 @@ def make_screen_nodes(svc: Services) -> dict[str, Node]:
         )
         return {"design_spec": spec, "iteration": 0}
 
+    async def copywriter(state: ScreenState) -> dict[str, Any]:
+        spec = await svc.copywriter.write(
+            _require(state, "clarified_requirements"),
+            _require(state, "screen"),
+            _require(state, "design_direction"),
+            _require(state, "design_spec"),
+            state.get("user_requirement", ""),
+        )
+        return {"design_spec": spec}
+
+    async def imagery(state: ScreenState) -> dict[str, Any]:
+        return {"design_spec": await svc.imagery.illustrate(_require(state, "design_spec"))}
+
     async def resolver(state: ScreenState) -> dict[str, Any]:
         return {"resolved_design": svc.resolver.resolve(_require(state, "design_spec"))}
 
@@ -108,6 +121,8 @@ def make_screen_nodes(svc: Services) -> dict[str, Node]:
     return {
         "retrieval": retrieval,
         "design_builder": design_builder,
+        "copywriter": copywriter,
+        "imagery": imagery,
         "resolver": resolver,
         "renderer": renderer,
         "verifier": verifier,

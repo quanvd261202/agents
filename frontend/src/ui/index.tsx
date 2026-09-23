@@ -27,6 +27,12 @@ export const listProp = (n: RenderNode, key: string, fallback: string[]): string
 };
 export const variantOf = (n: RenderNode, fallback = "standard"): string => (n.props.variant as string) || fallback;
 export const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+/** The sourced photograph for position `i` of an image slot, or undefined so the silhouette renders. */
+export const imageAt = (n: RenderNode, slot: string, i = 0): { url: string; alt: string } | undefined => {
+  const refs = (n.props.images as Record<string, { url: string; alt: string }[]> | undefined)?.[slot];
+  const ref = refs?.[i];
+  return ref && ref.url ? { url: ref.url, alt: ref.alt ?? "" } : undefined;
+};
 
 /* ------------------------------------------------------------------ layout shells */
 /** Tones re-scope the colour roles (see styles.css), so anything placed inside adapts. */
@@ -136,7 +142,11 @@ export function Card({ children, className, interactive, as: Tag = "article" }: 
 }
 
 /* ------------------------------------------------------------------ media */
-type Subject = "cup" | "bag" | "leaf" | "glass" | "abstract" | "person" | "space" | "device" | "chart" | "product";
+export type Subject = "cup" | "bag" | "leaf" | "glass" | "abstract" | "person" | "space" | "device" | "chart" | "product";
+const SUBJECTS: Subject[] = ["cup", "bag", "leaf", "glass", "abstract", "person", "space", "device", "chart", "product"];
+/** An image slot names what the photograph shows; the first known subject word picks the silhouette. */
+export const subjectOf = (value: string, fallback: Subject): Subject =>
+  (value.toLowerCase().split(/[^a-z]+/).find((w) => (SUBJECTS as string[]).includes(w)) as Subject | undefined) ?? fallback;
 
 /** Low-contrast silhouettes: they suggest the subject without pretending to be a photo. */
 const SILHOUETTES: Record<Subject, ReactNode> = {
@@ -153,11 +163,12 @@ const SILHOUETTES: Record<Subject, ReactNode> = {
 };
 
 /**
- * Art-directed placeholder for imagery: a duotone from the palette's media roles, a soft light,
- * film grain and a subject silhouette. Real images replace it in M10 without changing callers.
+ * Imagery. With `src` it is the photograph over the palette duotone (which shows while it loads);
+ * without one it is the art-directed placeholder: duotone, soft light, film grain and a subject
+ * silhouette. Callers pass `src={imageAt(node, slot, i)?.url}` and the subject as the fallback.
  */
-export function Media({ ratio = "4/3", subject = "abstract", label, className, tone = 0, zoom = true, children }: {
-  ratio?: string; subject?: Subject; label: string; className?: string; tone?: number; zoom?: boolean; children?: ReactNode;
+export function Media({ ratio = "4/3", subject = "abstract", label, className, tone = 0, zoom = true, src, children }: {
+  ratio?: string; subject?: Subject; label: string; className?: string; tone?: number; zoom?: boolean; src?: string; children?: ReactNode;
 }) {
   const angle = [150, 200, 120, 240][tone % 4];
   const light = ["28% 22%", "72% 18%", "50% 30%", "20% 70%"][tone % 4];
@@ -169,10 +180,11 @@ export function Media({ ratio = "4/3", subject = "abstract", label, className, t
       <div className={cn("absolute inset-0 transition-transform duration-700 ease-brand", zoom && "group-hover:scale-[1.04] group-hover/media:scale-[1.04]")}>
         <div data-motion-layer="" className="absolute inset-0 will-change-transform"
           style={{ background: `radial-gradient(120% 90% at ${light}, color-mix(in srgb, var(--color-media-a) 70%, white) 0%, transparent 55%), linear-gradient(${angle}deg, var(--color-media-a), var(--color-media-b))` }}>
+          {src ? <img src={src} alt="" loading="eager" decoding="async" className="absolute inset-0 h-full w-full object-cover" /> : (
           <svg viewBox="0 0 100 100" aria-hidden className="absolute left-1/2 top-1/2 h-[62%] max-h-[420px] -translate-x-1/2 -translate-y-1/2"
             style={{ color: "color-mix(in srgb, var(--color-media-b) 78%, black)", fill: "currentColor", opacity: 0.42 }}>
             {SILHOUETTES[subject]}
-          </svg>
+          </svg>)}
         </div>
       </div>
       <div aria-hidden className="pointer-events-none absolute inset-0 opacity-[0.18] mix-blend-overlay"

@@ -32,10 +32,11 @@ Check each breakpoint (mobile, tablet, desktop) for:
 
 The deterministic findings are already confirmed and will be fixed; do not repeat them.
 
-Do not report invisible implementation details, placeholder imagery or sample copy: images,
-text, names, prices and repeated sample items are stand-ins by design, not content to review.
-Judge structure, layout and visual design only, and do not invent problems. Do not propose
-rewriting the screen.
+Do not report invisible implementation details. The copy and photographs are the product's own
+content: judge how they sit in the layout (overflow, clipping, text over imagery), never their
+wording or choice of picture. Where a section still shows repeated sample items, those are
+stand-ins by design. Judge structure, layout and visual design only, and do not invent problems.
+Do not propose rewriting the screen.
 Every issue targets one section id from the list below, or "page" if it spans the whole page.
 Severity: critical = broken or unusable, major = clearly hurts the task, minor = polish.
 An empty list is the right answer for a screen that works."""

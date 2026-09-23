@@ -18,11 +18,14 @@ __all__ = [
     "S",
     "_ALL",
     "_CARD_ANIMS",
+    "_MEDIA",
     "_impl",
 ]
 
 _ALL = ["*"]
 _CARD_ANIMS = ["fade", "fade_up", "scale", "stagger", "reveal"]
+#: Image slots hold the photograph to find, not a keyword: the imagery service searches for it.
+_MEDIA = "the photograph to show: subject, setting and mood in 4-10 words"
 
 
 def _impl(

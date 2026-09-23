@@ -21,6 +21,14 @@ class AnimationIntent(StrictModel):
     intensity: Intensity = Intensity.subtle
 
 
+class ImageRef(StrictModel):
+    """A sourced photograph for an image slot. `alt` and `credit` come from the provider."""
+
+    url: str
+    alt: str = ""
+    credit: str = ""
+
+
 class SectionSpec(StrictModel):
     id: str
     type: str
@@ -29,6 +37,10 @@ class SectionSpec(StrictModel):
     animation: AnimationIntent | None = None
     children: list[SectionSpec] = Field(default_factory=list)
     content: dict[str, str] = Field(default_factory=dict)
+    #: Photographs per image slot (`media`, `image`), one per comma-separated entry of the slot's
+    #: description in `content`. Filled by the imagery service; absent means the art-directed
+    #: placeholder renders instead.
+    images: dict[str, list[ImageRef]] = Field(default_factory=dict)
 
 
 class DesignSpec(StrictModel):

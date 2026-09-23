@@ -370,7 +370,9 @@ async def test_bootstrap_wires_the_agent_chain_end_to_end():
     from app.bootstrap import build_services
     from app.core.config import Settings
 
-    settings = Settings(llm_provider="fake", embedding_provider="hashing", _env_file=None)
+    settings = Settings(
+        llm_provider="fake", embedding_provider="hashing", image_provider="fake", _env_file=None
+    )
     svc = await build_services(settings)
     llm: FakeLLMProvider = svc.llm  # type: ignore[assignment]
     for response in (

@@ -23,6 +23,8 @@ class ScreenState(TypedDict, total=False):
     """One planned screen on its way through build -> resolve -> render -> verify -> fix."""
 
     run_id: str
+    #: The user's brief, verbatim: product and brand names in it reach the copywriter.
+    user_requirement: str
     clarified_requirements: ClarifiedRequirements
     design_direction: DesignDirection
     screen: ScreenPlan

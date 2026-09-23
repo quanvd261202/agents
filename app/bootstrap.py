@@ -2,6 +2,7 @@
 
 from app.agents import (
     ClarifierAgent,
+    CopywriterAgent,
     DesignBuilderAgent,
     DirectorAgent,
     FixerAgent,
@@ -13,6 +14,7 @@ from app.catalog import default_component_registry
 from app.core.config import Settings
 from app.core.llm import build_llm_provider
 from app.dsl import default_design_resolver
+from app.imagery import Illustrator, build_image_provider
 from app.recipes import default_recipe_registry
 from app.renderer import PlaywrightRenderer
 from app.retrieval import build_retrieval_service
@@ -49,6 +51,13 @@ async def build_services(settings: Settings) -> Services:  # noqa: D103
         director=DirectorAgent(llm, default_theme_registry(), recipes, animations),
         retrieval=await build_retrieval_service(settings),
         builder=DesignBuilderAgent(llm, recipes, components, animations),
+        copywriter=CopywriterAgent(llm, components),
+        imagery=Illustrator(
+            build_image_provider(
+                settings.image_provider,
+                settings.pexels_api_key.get_secret_value() if settings.pexels_api_key else None,
+            )
+        ),
         resolver=resolver,
         renderer=PlaywrightRenderer(),
         verifier=VerifierAgent(vision, recipes),

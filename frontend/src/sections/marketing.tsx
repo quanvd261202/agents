@@ -6,16 +6,10 @@ import {
   Leaf, Lock, MapPin, Package, Palette, Play, Quote, ShieldCheck, Sparkles, Star, Truck, Users, Zap,
   type LucideIcon,
 } from "lucide-react";
-import { Avatar, Badge, Button, Carousel, Eyebrow, Marquee, Media, Rating, Section, SectionHeader, listProp, prop, range, variantOf } from "../ui";
+import { Avatar, Badge, Button, Carousel, Eyebrow, Marquee, Media, Rating, Section, SectionHeader, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject } from "../ui";
 import { cn } from "../lib/cn";
 import type { RenderNode } from "../types";
 import type { NodeProps, SectionMap } from "./types";
-
-type Subject = Parameters<typeof Media>[0]["subject"];
-const SUBJECTS = ["cup", "bag", "leaf", "glass", "abstract", "person", "space", "device", "chart", "product"];
-/** The `media` slot names what the image shows; a known subject picks the matching silhouette. */
-const subjectOf = (value: string, fallback: Subject): Subject =>
-  (SUBJECTS.includes(value) ? value : fallback) as Subject;
 
 /**
  * A list slot whose entries carry several parts: "Title|Body,Title|Body". An entry without a part
@@ -65,6 +59,7 @@ function Hero(props: NodeProps) {
   const { node } = props;
   const variant = variantOf(node);
   const subject = subjectOf(prop(node, "media", ""), "product");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", "Featured product");
 
   if (variant === "editorial") {
@@ -75,7 +70,7 @@ function Hero(props: NodeProps) {
         <div className="grid items-end gap-10 lg:grid-cols-12">
           <div className="lg:col-span-7 lg:pb-16"><HeroCopy {...props} size="display" /></div>
           <div className="relative lg:col-span-5">
-            <Media ratio="4/5" subject={subject} label={label} className="shadow-xl" />
+            <Media ratio="4/5" subject={subject} src={src} label={label} className="shadow-xl" />
             <Media ratio="1/1" subject="leaf" tone={2} label="Detail"
               className="absolute -bottom-10 -left-10 hidden w-44 border-4 border-bg shadow-lg md:block lg:-left-24 lg:w-56" />
           </div>
@@ -86,7 +81,7 @@ function Hero(props: NodeProps) {
   if (variant === "fullbleed") {
     return (
       <section aria-label="Hero" className="relative isolate page-x pb-10 pt-32 md:pb-16 md:pt-72">
-        <Media ratio="auto" subject={subject} label={label} zoom={false}
+        <Media ratio="auto" subject={subject} src={src} label={label} zoom={false}
           className="!absolute inset-0 -z-10 h-full rounded-none" />
         <div className="container-wide">
           <div className="max-w-2xl rounded-lg bg-bg/95 p-8 shadow-xl backdrop-blur md:p-12"><HeroCopy {...props} /></div>
@@ -100,7 +95,7 @@ function Hero(props: NodeProps) {
         <HeroCopy {...props} align="center" size="display" />
         <div className="relative mx-auto mt-16 grid max-w-4xl grid-cols-3 items-end gap-4 md:gap-8">
           {(["cup", subject, "glass"] as Subject[]).map((s, i) => (
-            <Media key={i} subject={s} tone={i} ratio={i === 1 ? "3/4" : "4/5"} label={`${label} ${i + 1}`}
+            <Media key={i} subject={s} src={i === 1 ? src : undefined} tone={i} ratio={i === 1 ? "3/4" : "4/5"} label={`${label} ${i + 1}`}
               className={cn("shadow-xl transition-transform duration-700 ease-brand",
                 i === 0 && "md:-rotate-6 md:translate-y-6", i === 2 && "md:rotate-6 md:translate-y-6", i === 1 && "z-10")} />))}
         </div>
@@ -116,13 +111,13 @@ function Hero(props: NodeProps) {
       {stacked ? (
         <div className="flex flex-col items-center gap-14">
           <HeroCopy {...props} align="center" size="display" />
-          <Media ratio="21/9" subject={subject} label={label} className="shadow-xl" />
+          <Media ratio="21/9" subject={subject} src={src} label={label} className="shadow-xl" />
         </div>
       ) : (
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <HeroCopy {...props} />
           <div className="relative">
-            <Media ratio={variant === "video" ? "16/10" : "5/4"} subject={variant === "video" ? "device" : subject} label={label} className="shadow-xl" />
+            <Media ratio={variant === "video" ? "16/10" : "5/4"} subject={variant === "video" ? "device" : subject} src={src} label={label} className="shadow-xl" />
             {variant === "video" && (
               <Button variant="inverse" size="lg" className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 shadow-xl hover:-translate-y-1/2" aria-label="Play video">
                 <Play aria-hidden className="size-4 fill-current" /> Play film
@@ -326,6 +321,7 @@ function FeatureBento({ node, children, hasChildren }: NodeProps) {
   const title = prop(node, "title", "Small details, done properly.");
   const subtitle = prop(node, "subtitle", "Everything that happens between choosing and enjoying, considered so you never have to think about it.");
   const subject = subjectOf(prop(node, "media", ""), "product");
+  const src = imageAt(node, "media")?.url;
   const items = entries(node, "items", FEATURES.map((f) => [f.title, f.body]));
   const item = (i: number) => ({ title: items[i]?.[0] || FEATURES[i].title, body: items[i]?.[1] ?? FEATURES[i].body });
 
@@ -389,7 +385,7 @@ function FeatureBento({ node, children, hasChildren }: NodeProps) {
         {/* A: the large media tile */}
         {premium ? (
           <article className={cn(tile, "min-h-[26rem] md:col-span-2 lg:row-span-2")}>
-            <Media ratio="auto" subject={subject} label={item(0).title} className="!absolute inset-0 h-full rounded-none" />
+            <Media ratio="auto" subject={subject} src={src} label={item(0).title} className="!absolute inset-0 h-full rounded-none" />
             <div className="relative mx-4 mb-4 mt-auto rounded-card bg-bg/95 p-6 shadow-lg backdrop-blur md:mx-6 md:mb-6 md:p-7">
               <Badge tone="accent" className="mb-4">{prop(node, "badge", "Signature")}</Badge>
               <h3 className="font-heading-set text-h3 text-balance">{item(0).title}</h3>
@@ -405,7 +401,7 @@ function FeatureBento({ node, children, hasChildren }: NodeProps) {
               </div>
               <IconTile Icon={Icon(0)} />
             </div>
-            <Media ratio="16/10" subject={subject} label={item(0).title} className="mt-auto rounded-none md:!aspect-auto md:min-h-72 md:flex-1" />
+            <Media ratio="16/10" subject={subject} src={src} label={item(0).title} className="mt-auto rounded-none md:!aspect-auto md:min-h-72 md:flex-1" />
           </article>
         )}
         {/* B: wide tile with a strip of thumbnails */}
@@ -466,7 +462,7 @@ function BrowserFrame({ url, children, className }: { url: string; children: Rea
 }
 
 /** A miniature website: skeleton nav, hero with media, a row of cards. Reads as a real screen. */
-function SiteMock({ subject, label }: { subject: Subject; label: string }) {
+function SiteMock({ subject, src, label }: { subject: Subject; src?: string; label: string }) {
   const line = "rounded-pill bg-fg/10";
   return (
     <div className="space-y-6 p-4 sm:p-6 md:p-8">
@@ -482,7 +478,7 @@ function SiteMock({ subject, label }: { subject: Subject; label: string }) {
           <span className={cn(line, "block h-2 w-full")} /><span className={cn(line, "block h-2 w-5/6")} />
           <span className="mt-2 flex gap-2"><span className="h-7 w-20 rounded-button bg-primary" /><span className="h-7 w-16 rounded-button border border-border" /></span>
         </div>
-        <Media ratio="4/3" subject={subject} label={label} className="rounded-card" />
+        <Media ratio="4/3" subject={subject} src={src} label={label} className="rounded-card" />
       </div>
       <div className="hidden grid-cols-3 gap-4 sm:grid">
         {(["cup", "leaf", "bag"] as Subject[]).map((s, i) => (
@@ -496,7 +492,7 @@ function SiteMock({ subject, label }: { subject: Subject; label: string }) {
 }
 
 /** A phone: bezel, dynamic island, side keys, and a miniature app screen. */
-function Phone({ subject, label, tone = 0, className }: { subject: Subject; label: string; tone?: number; className?: string }) {
+function Phone({ subject, src, label, tone = 0, className }: { subject: Subject; src?: string; label: string; tone?: number; className?: string }) {
   const line = "rounded-pill bg-fg/10";
   return (
     // Devices are drawn as physical objects, so their corner radius is fixed rather than themed.
@@ -512,7 +508,7 @@ function Phone({ subject, label, tone = 0, className }: { subject: Subject; labe
           <div aria-hidden className="flex items-center justify-between px-1">
             <span className="block h-3 w-20 rounded-sm bg-fg/80" /><span className="size-6 rounded-pill bg-surface-alt" />
           </div>
-          <Media ratio="4/5" subject={subject} tone={tone} label={label} className="rounded-card" />
+          <Media ratio="4/5" subject={subject} src={src} tone={tone} label={label} className="rounded-card" />
           {range(2).map((i) => (
             <div key={i} aria-hidden className="flex items-center gap-2.5 rounded-card bg-surface p-2">
               <span className="size-8 shrink-0 rounded-sm bg-media-a/60" />
@@ -540,6 +536,7 @@ function ShowcasePoint({ Icon, title, body, align = "start" }: { Icon: LucideIco
 function ProductShowcase({ node }: NodeProps) {
   const variant = variantOf(node);
   const subject = subjectOf(prop(node, "media", ""), variant === "standard" ? "product" : "cup");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", "A closer look");
   const eyebrow = prop(node, "eyebrow", "A closer look");
   const title = prop(node, "title", "Everything you love, in one place.");
@@ -564,7 +561,7 @@ function ProductShowcase({ node }: NodeProps) {
           <div className="relative">
             <div aria-hidden className="absolute -inset-8 rounded-lg bg-accent/10 blur-2xl" />
             <BrowserFrame url={prop(node, "url", "yourstudio.com")} className="relative">
-              <SiteMock subject={subject} label={label} />
+              <SiteMock subject={subject} src={src} label={label} />
             </BrowserFrame>
           </div>
         </div>
@@ -584,7 +581,7 @@ function ProductShowcase({ node }: NodeProps) {
           <div className="relative order-1 mx-auto w-64 sm:w-72 lg:order-2">
             <div aria-hidden className="absolute left-1/2 top-1/2 -z-10 size-[130%] -translate-x-1/2 -translate-y-1/2 rounded-pill"
               style={{ background: "radial-gradient(closest-side, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent)" }} />
-            <Phone subject={subject} label={label} />
+            <Phone subject={subject} src={src} label={label} />
           </div>
           <div className="order-3">{side(3, "start")}</div>
         </div>
@@ -596,7 +593,7 @@ function ProductShowcase({ node }: NodeProps) {
     <Section label={title} wide>
       <SectionHeader eyebrow={eyebrow} title={title} body={subtitle} align="center" />
       <div className="relative rounded-lg bg-surface-alt p-3 sm:p-6 md:p-10">
-        <Media ratio="16/9" subject={subject} label={label} className="shadow-xl" />
+        <Media ratio="16/9" subject={subject} src={src} label={label} className="shadow-xl" />
         <div className="absolute left-6 top-6 hidden max-w-sm rounded-card bg-bg/95 p-5 shadow-lg backdrop-blur md:block lg:left-16 lg:top-16">
           <p className="text-caption font-semibold uppercase tracking-[0.18em] text-muted">{prop(node, "callout_label", "This week")}</p>
           <p className="mt-1 font-heading-set text-h4 text-balance">{prop(node, "callout", "New arrivals, freshly in")}</p>
@@ -902,7 +899,7 @@ function CTA(props: NodeProps) {
             <p className="max-w-xl text-lead text-pretty">{body}</p>
             <div className="mt-2"><CTAButtons {...props} /></div>
           </div>
-          <Media ratio="16/10" subject={subject} tone={1} label={prop(node, "media_label", "A glimpse of what is waiting")}
+          <Media ratio="16/10" subject={subject} src={imageAt(node, "media")?.url} tone={1} label={prop(node, "media_label", "A glimpse of what is waiting")}
             className="h-full rounded-none lg:!aspect-auto lg:min-h-96" />
         </div>
       </Section>
@@ -983,7 +980,7 @@ function CTASplit(props: NodeProps) {
           <p className="flex items-center gap-2 text-small text-muted"><MapPin aria-hidden className="size-4" />{prop(node, "note", "Open every day · Delivery across the city")}</p>
         </div>
         <div className="relative p-3 lg:p-4 lg:pl-0">
-          <Media ratio="4/3" subject={subject} tone={2} label={prop(node, "media_label", "Inside the space")} className="h-full lg:!aspect-auto lg:min-h-[28rem]" />
+          <Media ratio="4/3" subject={subject} src={imageAt(node, "media")?.url} tone={2} label={prop(node, "media_label", "Inside the space")} className="h-full lg:!aspect-auto lg:min-h-[28rem]" />
           <div className="absolute bottom-8 left-8 flex items-center gap-3 rounded-card bg-bg/95 p-3 pr-5 shadow-lg backdrop-blur">
             <span className="grid size-10 place-items-center rounded-pill bg-accent text-accent-fg"><CalendarCheck aria-hidden className="size-5" /></span>
             <span>
@@ -1113,6 +1110,7 @@ function QRMark() {
 function AppDownload({ node }: NodeProps) {
   const variant = variantOf(node);
   const subject = subjectOf(prop(node, "media", ""), "cup");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", "The app on a phone");
   const headline = prop(node, "headline", "Everything we do, now in your pocket.");
   const body = prop(node, "body", "Order ahead, track deliveries and collect rewards with every visit. Available on iPhone and Android.");
@@ -1129,7 +1127,7 @@ function AppDownload({ node }: NodeProps) {
           </div>
           {/* The phone rises out of the band's lower edge. */}
           <div className="relative mx-auto -mb-40 w-56 md:mb-0 md:w-full md:translate-y-24 md:self-end">
-            <Phone subject={subject} label={label} />
+            <Phone subject={subject} src={src} label={label} />
           </div>
         </div>
       </Section>
@@ -1164,7 +1162,7 @@ function AppDownload({ node }: NodeProps) {
           <div aria-hidden className="absolute inset-x-0 bottom-0 mx-auto aspect-square w-[90%] rounded-pill"
             style={{ background: "radial-gradient(closest-side, color-mix(in srgb, var(--color-accent) 25%, transparent), transparent)" }} />
           <Phone subject="leaf" tone={2} label={`${label}, second screen`} className="relative -mr-12 hidden w-52 translate-y-8 -rotate-6 sm:block" />
-          <Phone subject={subject} label={label} className="relative z-10 w-60 sm:w-64" />
+          <Phone subject={subject} src={src} label={label} className="relative z-10 w-60 sm:w-64" />
         </div>
       </div>
     </Section>

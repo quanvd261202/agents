@@ -3,6 +3,7 @@
 from app.catalog.data._helpers import (  # noqa: F401
     _ALL,
     _CARD_ANIMS,
+    _MEDIA,
     C,
     ComponentDefinition,
     DesignMetadata,
@@ -11,7 +12,6 @@ from app.catalog.data._helpers import (  # noqa: F401
     _impl,
 )
 
-_MEDIA = "what the image shows: cup, bag, leaf, glass, product, person, space..."
 _EDITORIAL = DesignMetadata(visual_styles=["editorial", "premium", "minimal"])
 _STACK = ResponsiveBehavior(rules={"mobile": {"columns": 1}})
 

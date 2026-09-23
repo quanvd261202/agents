@@ -8,19 +8,13 @@ import {
 } from "lucide-react";
 import {
   Avatar, Badge, Button, Card, Carousel, ChoiceChips, Disclosure, Eyebrow, Media, Price, QuantityStepper, Rating,
-  Section, SectionHeader, Tabs, listProp, prop, range, variantOf,
+  Section, SectionHeader, Tabs, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject,
 } from "../ui";
 import { cn } from "../lib/cn";
 import type { RenderNode } from "../types";
 import type { NodeProps, SectionMap } from "./types";
 
-type Subject = NonNullable<Parameters<typeof Media>[0]["subject"]>;
-const SUBJECTS = ["cup", "bag", "leaf", "glass", "abstract", "person", "space", "device", "chart", "product"];
-/** The `media` slot names what the image shows; a known subject picks the matching silhouette. */
-const subjectOf = (value: string, fallback: Subject): Subject =>
-  (SUBJECTS.includes(value) ? value : fallback) as Subject;
-
-/** Stand-in catalogue until the Builder writes product content (M10). Domain-neutral on purpose. */
+/** Stand-in catalogue for sections that received no product content. Domain-neutral on purpose. */
 export const SAMPLE_PRODUCTS: { title: string; note: string; price: string; badge?: string; subject: Subject }[] = [
   { title: "Nº1 Signature", note: "Our house favourite", price: "$24", badge: "Bestseller", subject: "bag" },
   { title: "Morning Ritual", note: "Bright and balanced", price: "$19", badge: "New", subject: "cup" },
@@ -149,20 +143,28 @@ const trustIcon = (text: string, i: number) =>
   TRUST_ICONS.find(([re]) => re.test(text))?.[1] ?? [Truck, Sparkles, RotateCcw, Lock][i % 4];
 
 /* ------------------------------------------------------------------ product card & grid */
-function ProductCard({ node, index = 0 }: NodeProps & { index?: number }) {
-  const s = sample(index);
-  const title = prop(node, "title", s.title);
-  const price = prop(node, "price", s.price);
-  const badge = prop(node, "badge", s.badge ?? "");
+/** Trailing digits of a node id ("featured_products-item-3" -> 3) vary tone across sibling cards. */
+const indexOf = (id: string) => Number(id.match(/(\d+)$/)?.[1] ?? 0);
+
+function ProductCard({ node, index }: NodeProps & { index?: number }) {
+  const i = index ?? indexOf(node.id);
+  // A card with its own title is real content: nothing is borrowed from the sample catalogue.
+  const s = prop(node, "title", "") ? null : sample(i);
+  const title = s ? s.title : prop(node, "title", "");
+  const price = s ? s.price : prop(node, "price", "");
+  const note = s ? s.note : prop(node, "note", "");
+  const badge = s ? s.badge ?? "" : prop(node, "badge", "");
+  const subject = s ? s.subject : subjectOf(prop(node, "image", ""), "product");
+  const src = imageAt(node, "image")?.url;
   const variant = variantOf(node);
 
   if (variant === "compact") {
     return (
       <article className="group flex items-center gap-4 rounded-card border border-border bg-surface p-3 transition-colors hover:border-fg/25">
-        <Media ratio="1/1" subject={s.subject} tone={index} label={title} className="w-20 shrink-0 rounded-sm" />
+        <Media ratio="1/1" subject={subject} src={src} tone={i} label={title} className="w-20 shrink-0 rounded-sm" />
         <div className="min-w-0 flex-1">
           <h3 className="truncate font-semibold">{title}</h3>
-          <p className="truncate text-small text-muted">{prop(node, "note", s.note)}</p>
+          {note && <p className="truncate text-small text-muted">{note}</p>}
           <Price value={price} className="mt-1 text-small" />
         </div>
         <Button size="icon" variant="secondary" aria-label={`Add ${title} to cart`}><Plus className="size-4" /></Button>
@@ -173,7 +175,7 @@ function ProductCard({ node, index = 0 }: NodeProps & { index?: number }) {
   return (
     <article className="group relative flex flex-col">
       <div className="relative">
-        <Media ratio={premium ? "4/5" : "1/1"} subject={s.subject} tone={index} label={title}
+        <Media ratio={premium ? "4/5" : "1/1"} subject={subject} src={src} tone={i} label={title}
           className={cn("transition-shadow duration-500 ease-brand group-hover:shadow-lg", !premium && "rounded-card")} />
         {badge && <Badge tone={badgeTone(badge)} className="absolute left-3 top-3">{badge}</Badge>}
         <FavoriteButton title={title} className="absolute right-3 top-3" />
@@ -185,11 +187,11 @@ function ProductCard({ node, index = 0 }: NodeProps & { index?: number }) {
       <div className={cn("mt-4 flex items-start justify-between gap-4", premium && "mt-5")}>
         <div className="min-w-0">
           <h3 className={cn("font-semibold", premium && "font-heading-set text-h4")}>{title}</h3>
-          <p className="mt-1 text-small text-muted">{prop(node, "note", s.note)}</p>
+          {note && <p className="mt-1 text-small text-muted">{note}</p>}
         </div>
         <Price value={price} className="shrink-0" />
       </div>
-      {premium && <Rating value={4.8} count={120 + index * 17} className="mt-3" />}
+      {premium && <Rating value={4.8} count={120 + i * 17} className="mt-3" />}
     </article>
   );
 }
@@ -223,7 +225,10 @@ function ProductGrid({ node, children, hasChildren, columns }: NodeProps) {
 /* ------------------------------------------------------------------ product detail */
 const GALLERY: Subject[] = ["bag", "cup", "leaf", "glass", "product"];
 
-function Gallery({ title, main, layout }: { title: string; main: Subject; layout: "below" | "side" }) {
+/** The `media` slot lists up to four gallery shots; each position takes its photo or a silhouette. */
+const shotSrc = (node: RenderNode, i: number) => imageAt(node, "media", i)?.url;
+
+function Gallery({ node, title, main, layout }: { node: RenderNode; title: string; main: Subject; layout: "below" | "side" }) {
   const shots = [main, ...GALLERY.filter((s) => s !== main)].slice(0, 4) as Subject[];
   const [active, setActive] = useState(0);
   const thumbs = (
@@ -233,14 +238,14 @@ function Gallery({ title, main, layout }: { title: string; main: Subject; layout
         <button key={i} type="button" aria-label={`Show image ${i + 1} of ${shots.length}`} aria-pressed={active === i} onClick={() => setActive(i)}
           className={cn("rounded-sm ring-offset-2 ring-offset-bg transition-[opacity,box-shadow] duration-200 ease-brand",
             active === i ? "ring-2 ring-fg" : "opacity-70 hover:opacity-100")}>
-          <Media ratio="1/1" subject={s} tone={i} zoom={false} label={`${title}, view ${i + 1}`} className="rounded-sm" />
+          <Media ratio="1/1" subject={s} src={shotSrc(node, i)} tone={i} zoom={false} label={`${title}, view ${i + 1}`} className="rounded-sm" />
         </button>))}
     </div>
   );
   return (
     <div className={cn("flex flex-col gap-3", layout === "side" && "lg:flex-row lg:gap-4")}>
       <div className="relative min-w-0 flex-1">
-        <Media ratio={layout === "side" ? "4/5" : "1/1"} subject={shots[active]} tone={active} label={`${title}, image ${active + 1}`} className="shadow-sm" />
+        <Media ratio={layout === "side" ? "4/5" : "1/1"} subject={shots[active]} src={shotSrc(node, active)} tone={active} label={`${title}, image ${active + 1}`} className="shadow-sm" />
         <Badge tone="primary" className="absolute left-4 top-4">{active + 1} / {shots.length}</Badge>
       </div>
       {thumbs}
@@ -342,7 +347,7 @@ function ProductDetail({ node }: NodeProps) {
     return (
       <Section label={`Product: ${title}`} wide size="sm">
         <div className="grid gap-10 lg:grid-cols-2 lg:gap-12">
-          <div className="lg:sticky lg:top-8 lg:self-start"><Gallery title={title} main={main} layout="side" /></div>
+          <div className="lg:sticky lg:top-8 lg:self-start"><Gallery node={node} title={title} main={main} layout="side" /></div>
           <div className="rounded-lg bg-surface p-6 sm:p-10 lg:p-14">
             <div className="flex flex-col gap-8 lg:sticky lg:top-10">
               {header()}
@@ -372,7 +377,7 @@ function ProductDetail({ node }: NodeProps) {
         {header(true)}
         <Carousel label={`${title} images`} className="mt-12">
           {shots.map((s, i) => (
-            <Media key={i} ratio="4/5" subject={s} tone={i} label={`${title}, view ${i + 1}`}
+            <Media key={i} ratio="4/5" subject={s} src={shotSrc(node, i)} tone={i} label={`${title}, view ${i + 1}`}
               className="w-[80vw] sm:w-[46vw] lg:w-[386px]" />))}
         </Carousel>
         <div className="mt-12 grid gap-10 lg:grid-cols-12 lg:gap-14">
@@ -391,7 +396,7 @@ function ProductDetail({ node }: NodeProps) {
     <Section label={`Product: ${title}`} size="sm">
       {/* Phones read gallery, buy box, details; desktop keeps details under the gallery. */}
       <div className="grid gap-10 lg:grid-cols-12 lg:gap-x-16 lg:gap-y-14">
-        <div className="lg:col-span-7"><Gallery title={title} main={main} layout="below" /></div>
+        <div className="lg:col-span-7"><Gallery node={node} title={title} main={main} layout="below" /></div>
         <div className="flex flex-col gap-8 lg:sticky lg:top-8 lg:col-span-5 lg:row-span-2 lg:self-start">
           {header()}
           <div className="border-t border-border pt-8"><DetailOptions node={node} children={null} hasChildren={false} /></div>
@@ -720,11 +725,19 @@ const CART = [
   { i: 2, meta: "Large", qty: 2 },
   { i: 3, meta: "Set of 2", qty: 1 },
 ];
-const cartLines = () => CART.map((c) => ({ ...sample(c.i), ...c, unit: money(sample(c.i).price) }));
+type CartLine = { i: number; title: string; meta: string; qty: number; unit: number; subject: Subject; src?: string };
+/** Product-card children are the cart's real lines; without them the sample lines stand in. */
+const cartLines = (node?: RenderNode): CartLine[] =>
+  node && node.children.length
+    ? node.children.map((c, i) => ({
+        i, title: prop(c, "title", ""), meta: prop(c, "note", ""), qty: 1, unit: money(prop(c, "price", "0")),
+        subject: subjectOf(prop(c, "image", ""), "product"), src: imageAt(c, "image")?.url,
+      }))
+    : CART.map((c) => ({ ...sample(c.i), ...c, unit: money(sample(c.i).price) }));
 
 function CartItems({ node }: NodeProps) {
   const variant = variantOf(node);
-  const lines = cartLines();
+  const lines = cartLines(node);
   const subtotal = lines.reduce((s, l) => s + l.unit * l.qty, 0);
   const threshold = money(prop(node, "free_shipping_threshold", "$120"));
   const left = Math.max(0, threshold - subtotal);
@@ -740,10 +753,10 @@ function CartItems({ node }: NodeProps) {
           <ul className="divide-y divide-border">
             {lines.map((l) => (
               <li key={l.i} className="flex items-center gap-4 py-4">
-                <Media ratio="1/1" subject={l.subject} tone={l.i} label={l.title} zoom={false} className="w-16 shrink-0 rounded-sm" />
+                <Media ratio="1/1" subject={l.subject} src={l.src} tone={l.i} label={l.title} zoom={false} className="w-16 shrink-0 rounded-sm" />
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate font-semibold">{l.title}</h3>
-                  <p className="truncate text-small text-muted">{l.meta} · Qty {l.qty}</p>
+                  <p className="truncate text-small text-muted">{l.meta ? `${l.meta} · ` : ""}Qty {l.qty}</p>
                   <Price value={`$${(l.unit * l.qty).toFixed(2)}`} className="mt-0.5 text-small sm:hidden" />
                 </div>
                 <Price value={`$${(l.unit * l.qty).toFixed(2)}`} className="hidden text-small sm:flex" />
@@ -775,10 +788,10 @@ function CartItems({ node }: NodeProps) {
       <ul className="mt-4 divide-y divide-border border-b border-border md:mt-0">
         {lines.map((l) => (
           <li key={l.i} className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-4 py-6 md:grid-cols-[7rem_minmax(0,1fr)_10rem_7rem] md:items-center md:gap-x-6">
-            <Media ratio="1/1" subject={l.subject} tone={l.i} label={l.title} className="rounded-card" />
+            <Media ratio="1/1" subject={l.subject} src={l.src} tone={l.i} label={l.title} className="rounded-card" />
             <div className="min-w-0 space-y-1">
               <h3 className="font-heading-set text-h4">{l.title}</h3>
-              <p className="text-small text-muted">{l.meta}</p>
+              {l.meta && <p className="text-small text-muted">{l.meta}</p>}
               <p className="text-small tabular-nums text-muted">${l.unit.toFixed(2)} each</p>
               <div className="flex gap-4 pt-1">
                 <button type="button" className="inline-flex min-h-11 items-center gap-1.5 text-small font-medium text-muted transition-colors hover:text-fg">
@@ -889,15 +902,15 @@ function OrderSummary({ node }: NodeProps) {
 const COLLECTIONS = ["The Signature Edit", "Seasonal Rituals", "Cold & Bright", "Gifts & Sets", "Everyday Essentials"];
 const COLLECTION_SUBJECTS: Subject[] = ["bag", "leaf", "glass", "product", "cup"];
 
-function CollectionTile({ name, count, desc, subject, tone, ratio, className, mediaClass, cta, below }: {
-  name: string; count: string; desc: string; subject: Subject; tone: number; ratio: string; className?: string; mediaClass?: string; cta: string;
+function CollectionTile({ name, count, desc, subject, src, tone, ratio, className, mediaClass, cta, below }: {
+  name: string; count: string; desc: string; subject: Subject; src?: string; tone: number; ratio: string; className?: string; mediaClass?: string; cta: string;
   below?: boolean;
 }) {
   if (below) {
     return (
       <a href="#" className={cn("group block", className)}>
         <div className="relative">
-          <Media ratio={ratio} subject={subject} tone={tone} label={name} className="transition-shadow duration-500 ease-brand group-hover:shadow-xl" />
+          <Media ratio={ratio} subject={subject} src={src} tone={tone} label={name} className="transition-shadow duration-500 ease-brand group-hover:shadow-xl" />
           <span className="absolute left-4 top-4 rounded-pill bg-bg/95 px-3 py-1 text-caption font-semibold shadow-sm">{count}</span>
           <span className="absolute bottom-4 right-4 inline-flex h-11 items-center gap-2 rounded-pill bg-primary px-5 text-small font-semibold text-primary-fg shadow-md transition-[opacity,transform] duration-300 ease-brand md:translate-y-2 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-focus-visible:translate-y-0 md:group-focus-visible:opacity-100">
             {cta}<ArrowRight aria-hidden className="size-4" />
@@ -910,7 +923,7 @@ function CollectionTile({ name, count, desc, subject, tone, ratio, className, me
   }
   return (
     <a href="#" className={cn("group relative block overflow-hidden rounded-media", className)}>
-      <Media ratio={ratio} subject={subject} tone={tone} label={name} className={cn("transition-shadow duration-500 ease-brand group-hover:shadow-xl", mediaClass)} />
+      <Media ratio={ratio} subject={subject} src={src} tone={tone} label={name} className={cn("transition-shadow duration-500 ease-brand group-hover:shadow-xl", mediaClass)} />
       <div className="absolute inset-x-3 bottom-3 rounded-card bg-bg/95 p-5 shadow-md backdrop-blur transition-transform duration-500 ease-brand md:group-hover:-translate-y-1">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
@@ -943,7 +956,7 @@ function CollectionGrid({ node, columns }: NodeProps) {
   const title = prop(node, "title", "Shop by collection");
   const tile = (i: number, ratio: string, className?: string, mediaClass?: string, below?: boolean) => (
     <CollectionTile key={i} below={below} name={names[i]} count={at(counts, i, "")} desc={at(descs, i, "")} cta={cta} tone={i}
-      subject={subjectOf(at(media, i, "bag"), COLLECTION_SUBJECTS[i % 5])} ratio={ratio} className={className} mediaClass={mediaClass} />);
+      subject={subjectOf(at(media, i, "bag"), COLLECTION_SUBJECTS[i % 5])} src={imageAt(node, "media", i)?.url} ratio={ratio} className={className} mediaClass={mediaClass} />);
   const header = (
     <SectionHeader eyebrow={prop(node, "eyebrow", "Collections")} title={title}
       body={prop(node, "subtitle", "Find your way in — each collection is curated around a moment in the day.")}
@@ -991,6 +1004,7 @@ function PromoBanner({ node }: NodeProps) {
   const countdown = prop(node, "countdown", "Ends Sunday at midnight");
   const cta = prop(node, "cta", "Shop the edit");
   const subject = subjectOf(prop(node, "media", ""), "leaf");
+  const src = imageAt(node, "media")?.url;
   const codePill = code && (
     <span className="inline-flex items-center gap-2 rounded-pill border border-dashed border-current/40 px-4 py-2 text-small">
       Use code <span className="font-semibold tracking-[0.12em]">{code}</span>
@@ -1025,7 +1039,7 @@ function PromoBanner({ node }: NodeProps) {
   if (variant === "overlay") {
     return (
       <section aria-label="Promotion" className="relative isolate page-x py-10 md:py-24">
-        <Media ratio="auto" subject={subject} label={prop(node, "media_label", "Seasonal campaign")} zoom={false} className="!absolute inset-0 -z-10 h-full rounded-none" />
+        <Media ratio="auto" subject={subject} src={src} label={prop(node, "media_label", "Seasonal campaign")} zoom={false} className="!absolute inset-0 -z-10 h-full rounded-none" />
         <div className="container-page flex md:justify-end">
           <div className="w-full max-w-xl rounded-lg bg-bg/95 p-8 shadow-xl backdrop-blur md:p-12">{copy}</div>
         </div>
@@ -1036,7 +1050,7 @@ function PromoBanner({ node }: NodeProps) {
     <Section label="Promotion" size="sm">
       <div className="tone-inverse grid overflow-hidden rounded-lg lg:grid-cols-2">
         <div className="p-8 sm:p-12 lg:p-16">{copy}</div>
-        <Media ratio="4/3" subject={subject} label={prop(node, "media_label", "Seasonal campaign")} className="rounded-none lg:h-full lg:aspect-auto!" />
+        <Media ratio="4/3" subject={subject} src={src} label={prop(node, "media_label", "Seasonal campaign")} className="rounded-none lg:h-full lg:aspect-auto!" />
       </div>
     </Section>
   );
@@ -1068,6 +1082,7 @@ function ProductCustomizer({ node }: NodeProps) {
   const productName = prop(node, "product_name", "House Latte");
   const cta = `${prop(node, "primary_cta", "Add to order")} · ${fmt(unit * qty, cur)}`;
   const subject = subjectOf(prop(node, "media", ""), temp[0]?.toLowerCase().includes("ice") ? "glass" : "cup");
+  const src = imageAt(node, "media")?.url;
 
   const groups = [
     sizes.length > 0 && { key: "size", label: prop(node, "size_label", "Size"), options: sizes, value: size, set: setSize, deltas: sizeD },
@@ -1082,7 +1097,7 @@ function ProductCustomizer({ node }: NodeProps) {
   const summary = (withMedia?: boolean) => (
     <div className="space-y-5">
       <div className="flex items-center gap-4">
-        {withMedia && <Media ratio="1/1" subject={subject} tone={1} label={productName} zoom={false} className="w-16 shrink-0 rounded-sm" />}
+        {withMedia && <Media ratio="1/1" subject={subject} src={src} tone={1} label={productName} zoom={false} className="w-16 shrink-0 rounded-sm" />}
         <div className="min-w-0">
           <p className="text-caption font-semibold uppercase tracking-[0.14em] text-muted">{prop(node, "summary_label", "Your order")}</p>
           <p className="font-heading-set text-h4">{productName}</p>
@@ -1125,7 +1140,7 @@ function ProductCustomizer({ node }: NodeProps) {
       <Section label={title} size="sm">
         <div className="mx-auto max-w-3xl overflow-hidden rounded-lg border border-border bg-surface">
           <div className="flex items-center gap-5 border-b border-border p-6">
-            <Media ratio="1/1" subject={subject} tone={2} label={productName} className="w-20 shrink-0 rounded-card" />
+            <Media ratio="1/1" subject={subject} src={src} tone={2} label={productName} className="w-20 shrink-0 rounded-card" />
             <div className="min-w-0 flex-1">
               <h2 className="font-heading-set text-h4">{productName}</h2>
               <p className="text-small text-muted">{prop(node, "description", "Choose every detail. We prepare it fresh the moment you order.")}</p>
@@ -1148,7 +1163,7 @@ function ProductCustomizer({ node }: NodeProps) {
       <div className="grid gap-10 lg:grid-cols-12 lg:gap-16">
         <div className="lg:col-span-5">
           <div className="relative lg:sticky lg:top-8">
-            <Media ratio="4/5" subject={subject} tone={0} label={productName} className="shadow-lg" />
+            <Media ratio="4/5" subject={subject} src={src} tone={0} label={productName} className="shadow-lg" />
             <div className="absolute inset-x-4 bottom-4 flex items-center justify-between gap-4 rounded-card bg-bg/95 p-4 shadow-md backdrop-blur">
               <div className="min-w-0"><p className="truncate font-semibold">{productName}</p><p className="truncate text-small text-muted">{choices}</p></div>
               <span className="shrink-0 font-heading-set text-h4 tabular-nums">{fmt(unit, cur)}</span>
@@ -1264,6 +1279,7 @@ function CategoryHero({ node }: NodeProps) {
   const subs = listProp(node, "subcategories", ["All", "New", "Best sellers", "Limited", "Gift sets"]);
   const [active, setActive] = useState(0);
   const subject = subjectOf(prop(node, "media", ""), "bag");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", `${title} collection`);
   const crumbs = listProp(node, "breadcrumb", ["Home", "Shop"]);
   const breadcrumb = (
@@ -1287,7 +1303,7 @@ function CategoryHero({ node }: NodeProps) {
     return (
       <Section label={title} wide size="sm">
         <div className="relative">
-          <Media ratio="21/9" subject={subject} label={label} zoom={false} className="min-h-72 shadow-lg" />
+          <Media ratio="21/9" subject={subject} src={src} label={label} zoom={false} className="min-h-72 shadow-lg" />
           <div className="relative mx-3 -mt-16 rounded-lg bg-bg/95 p-6 shadow-xl backdrop-blur sm:mx-6 sm:p-8 md:absolute md:bottom-8 md:left-8 md:mx-0 md:mt-0 md:max-w-xl md:p-10">
             {breadcrumb}
             <h1 className="mt-4 font-heading-set text-h1 text-balance">{title}</h1>
@@ -1331,7 +1347,7 @@ function CategoryHero({ node }: NodeProps) {
           {chips()}
         </div>
         <div className="relative lg:col-span-6">
-          <Media ratio="5/4" subject={subject} label={label} className="shadow-xl" />
+          <Media ratio="5/4" subject={subject} src={src} label={label} className="shadow-xl" />
           <div className="absolute -bottom-5 left-5 flex items-center gap-3 rounded-card bg-bg px-5 py-3.5 shadow-lg">
             <Package aria-hidden className="size-5" />
             <div><p className="text-small font-semibold">{count}</p><p className="text-caption text-muted">{prop(node, "media_note", "New pieces added weekly")}</p></div>
@@ -1347,6 +1363,7 @@ function ProductSpotlight({ node }: NodeProps) {
   const variant = variantOf(node);
   const title = prop(node, "title", "Nº1 Signature");
   const subject = subjectOf(prop(node, "media", ""), "bag");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", title);
   const notes = listProp(node, "notes", ["Crafted", "Character", "Origin", "Pairs with"]);
   const details = listProp(node, "note_details", ["By hand, in small batches", "Rich, rounded and quietly complex", "Responsibly sourced, fully traceable", "Slow mornings and long conversations"]);
@@ -1377,7 +1394,7 @@ function ProductSpotlight({ node }: NodeProps) {
         <div className="mt-14 grid items-center gap-10 lg:grid-cols-[1fr_minmax(0,1.25fr)_1fr] lg:gap-14">
           <ul className="order-2 space-y-8 lg:order-1">{notes.slice(0, half).map((n, i) => note(n, i, "right"))}</ul>
           <div className="relative order-1 lg:order-2">
-            <Media ratio="3/4" subject={subject} label={label} className="shadow-xl" />
+            <Media ratio="3/4" subject={subject} src={src} label={label} className="shadow-xl" />
             <Badge tone="primary" className="absolute left-1/2 top-5 -translate-x-1/2 shadow-md">{prop(node, "badge", "Bestseller")}</Badge>
           </div>
           <ul className="order-3 space-y-8">{notes.slice(half).map((n, i) => note(n, i + half, "left"))}</ul>
@@ -1407,7 +1424,7 @@ function ProductSpotlight({ node }: NodeProps) {
             {ctas()}
           </div>
           <div className="relative">
-            <Media ratio="1/1" subject={subject} label={label} className="shadow-xl" />
+            <Media ratio="1/1" subject={subject} src={src} label={label} className="shadow-xl" />
             <div className="absolute bottom-5 right-5 rounded-card bg-bg px-5 py-4 text-right shadow-lg">
               <p className="text-caption text-muted">{prop(node, "price_label", "From")}</p>
               <p className="font-heading-set text-h3 tabular-nums">{price}</p>
@@ -1421,7 +1438,7 @@ function ProductSpotlight({ node }: NodeProps) {
     <Section label={title}>
       <div className="grid items-center gap-14 lg:grid-cols-12 lg:gap-16">
         <div className="relative lg:col-span-7">
-          <Media ratio="4/5" subject={subject} label={label} className="shadow-xl" />
+          <Media ratio="4/5" subject={subject} src={src} label={label} className="shadow-xl" />
           <Media ratio="1/1" subject="leaf" tone={2} label={`${title}, detail`}
             className="absolute -bottom-8 -right-4 hidden w-44 border-4 border-bg shadow-lg sm:block lg:-right-10 lg:w-56" />
           <Badge tone="primary" className="absolute left-5 top-5 shadow-md">{prop(node, "badge", "Bestseller")}</Badge>
@@ -1490,7 +1507,7 @@ function SubscriptionOffer({ node }: NodeProps) {
       <Section label={title} tone="surface">
         <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <div className="relative">
-            <Media ratio="4/5" subject={subjectOf(prop(node, "media", ""), "bag")} label={prop(node, "media_label", "Subscription box")} className="shadow-xl" />
+            <Media ratio="4/5" subject={subjectOf(prop(node, "media", ""), "bag")} src={imageAt(node, "media")?.url} label={prop(node, "media_label", "Subscription box")} className="shadow-xl" />
             <div className="absolute left-5 top-5 flex items-center gap-2 rounded-pill bg-bg px-4 py-2 text-small font-semibold shadow-md"><Repeat aria-hidden className="size-4" />{discount} on every delivery</div>
           </div>
           <div className="flex flex-col gap-8">
@@ -1554,7 +1571,8 @@ function Lookbook({ node }: NodeProps) {
   const looks = listProp(node, "looks", ["Slow Sunday", "Studio hours", "Golden afternoon", "The long table"]);
   const captions = listProp(node, "captions", ["Everything you need for an unhurried morning.", "Quiet tools for focused days.", "Light, bright and made to share.", "Set for friends, and for lingering."]);
   const productNames = listProp(node, "products", SAMPLE_PRODUCTS.map((p) => p.title as string));
-  const product = (i: number) => ({ ...sample(i), title: at(productNames, i, sample(i).title) });
+  const prices = listProp(node, "prices", []);
+  const product = (i: number) => ({ ...sample(i), title: at(productNames, i, sample(i).title), price: at(prices, i, sample(i).price) });
   const [open, setOpen] = useState<string | null>("0-0");
   const header = (
     <SectionHeader eyebrow={prop(node, "eyebrow", "Lookbook")} title={title}

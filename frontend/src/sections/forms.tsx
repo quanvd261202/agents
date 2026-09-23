@@ -11,13 +11,9 @@ import {
   Bell, Building2, Check, ChevronDown, CreditCard, Eye, EyeOff, KeyRound, Lock, Mail, Palette, Shield, Store, Truck,
   User, Users, Wallet, X, Zap, type LucideIcon,
 } from "lucide-react";
-import { Avatar, Button, Media, listProp, prop, variantOf } from "../ui";
+import { Avatar, Button, Media, imageAt, listProp, prop, subjectOf, variantOf } from "../ui";
 import { cn } from "../lib/cn";
 import type { NodeProps, SectionMap } from "./types";
-
-type Subject = Parameters<typeof Media>[0]["subject"];
-const SUBJECTS = ["cup", "bag", "leaf", "glass", "abstract", "person", "space", "device", "chart", "product"];
-const subjectOf = (value: string, fallback: Subject): Subject => (SUBJECTS.includes(value) ? value : fallback) as Subject;
 
 /* ================================================================== field kit */
 
@@ -700,7 +696,7 @@ function AuthForm({ node }: NodeProps) {
             {legal}
           </div>
           <div className="relative hidden lg:block">
-            <Media ratio="auto" subject={subjectOf(prop(node, "media", ""), "space")} tone={1} label={prop(node, "media_label", `Inside ${brand}`)} zoom={false}
+            <Media ratio="auto" subject={subjectOf(prop(node, "media", ""), "space")} src={imageAt(node, "media")?.url} tone={1} label={prop(node, "media_label", `Inside ${brand}`)} zoom={false}
               className="!absolute inset-0 h-full" />
             <figure className="absolute inset-x-6 bottom-6 rounded-lg bg-bg/95 p-7 text-fg shadow-xl backdrop-blur">
               <blockquote className="font-heading-set text-h4 text-pretty">

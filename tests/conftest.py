@@ -48,6 +48,7 @@ class StubServices:
         self.fail_times, self.fixer_ok, self.ready = fail_times, fixer_ok, ready
         self.screens = screens
         self.briefs: list[str] = []
+        self.copy_briefs: list[str] = []
         self.calls: list[str] = []
 
     async def clarify(self, requirement, answers):
@@ -87,6 +88,15 @@ class StubServices:
     async def build(self, req, screen, direction, ctx):
         self.calls.append("build")
         return SPEC.model_copy(update={"screen_id": screen.id})
+
+    async def write(self, req, screen, direction, spec, brief=""):
+        self.calls.append("write")
+        self.copy_briefs.append(brief)
+        return spec
+
+    async def illustrate(self, spec):
+        self.calls.append("illustrate")
+        return spec
 
     def resolve(self, spec, *, reduced_motion=False):
         self.calls.append("resolve")
@@ -131,7 +141,9 @@ class StubServices:
 
 
 def make_services(stub: StubServices, max_iter: int = 3) -> Services:
-    settings = Settings(llm_provider="fake", max_design_iterations=max_iter, _env_file=None)
+    settings = Settings(
+        llm_provider="fake", image_provider="none", max_design_iterations=max_iter, _env_file=None
+    )
     return Services(
         settings=settings,
         llm=FakeLLMProvider(),
@@ -140,6 +152,8 @@ def make_services(stub: StubServices, max_iter: int = 3) -> Services:
         director=stub,
         retrieval=stub,
         builder=stub,
+        copywriter=stub,
+        imagery=stub,
         resolver=stub,
         renderer=stub,
         verifier=stub,

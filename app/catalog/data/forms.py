@@ -3,6 +3,7 @@
 from app.catalog.data._helpers import (  # noqa: F401
     _ALL,
     _CARD_ANIMS,
+    _MEDIA,
     C,
     ComponentDefinition,
     DesignMetadata,
@@ -71,7 +72,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="footer_prompt", description="e.g. New here?"),
             S(name="footer_link", description="e.g. Create an account"),
             S(name="legal", description="lead-in to the Terms / Privacy links"),
-            S(name="media", description="image subject (split)"),
+            S(name="media", description="split variant: " + _MEDIA),
             S(name="media_label", description="image description (split)"),
             S(name="quote", description="testimonial over the image (split)"),
             S(name="quote_author", description="testimonial author (split)"),

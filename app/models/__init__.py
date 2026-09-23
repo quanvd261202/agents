@@ -1,5 +1,5 @@
 from app.models.direction import DesignDirection, ScreenDirection
-from app.models.dsl import AnimationIntent, DesignSpec, LayoutIntent, SectionSpec
+from app.models.dsl import AnimationIntent, DesignSpec, ImageRef, LayoutIntent, SectionSpec
 from app.models.learning import LearningEvent, Lesson
 from app.models.plan import ScreenPlan, UXPlan
 from app.models.render import RenderModel, RenderNode, RenderResult
@@ -14,6 +14,7 @@ __all__ = [
     "DesignDirection",
     "DesignSpec",
     "FixResult",
+    "ImageRef",
     "Issue",
     "LayoutIntent",
     "LearningEvent",

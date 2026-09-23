@@ -4,6 +4,7 @@ Implementation mappings live here, never in agents."""
 from app.catalog.data._helpers import (  # noqa: F401
     _ALL,
     _CARD_ANIMS,
+    _MEDIA,
     C,
     ComponentDefinition,
     DesignMetadata,
@@ -32,7 +33,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="company", description="company or publication shown as a wordmark"),
             S(name="rating", description="number from 1 to 5"),
             S(name="rating_note", description="line under the rating badge (split variant)"),
-            S(name="media", description="what the portrait shows: person, space, product..."),
+            S(name="media", description="the portrait: " + _MEDIA),
             S(name="media_label"),
         ],
         implementation=_impl(
@@ -156,7 +157,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="timestamps", description="comma-separated chapter start times, e.g. 1:24"),
             S(name="duration", description="e.g. 6 min film"),
             S(name="play_label"),
-            S(name="media", description="what the poster shows: space, person, product..."),
+            S(name="media", description="the poster: " + _MEDIA),
             S(name="media_label"),
         ],
         implementation=_impl(

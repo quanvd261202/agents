@@ -22,6 +22,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = Field(None, validation_alias="OPENAI_API_KEY")
     anthropic_api_key: SecretStr | None = Field(None, validation_alias="ANTHROPIC_API_KEY")
 
+    # Photographs for image slots. `pexels` needs PEXELS_API_KEY (free); `fake` returns
+    # deterministic test URLs; `none` keeps the art-directed placeholders.
+    image_provider: Literal["pexels", "fake", "none"] = "pexels"
+    pexels_api_key: SecretStr | None = Field(None, validation_alias="PEXELS_API_KEY")
+
     # Embeddings for retrieval. `hashing` is deterministic and offline, for tests and local runs.
     embedding_provider: Literal["openai", "hashing"] = "openai"
     embedding_model: str = "text-embedding-3-small"

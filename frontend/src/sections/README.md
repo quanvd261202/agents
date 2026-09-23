@@ -43,9 +43,14 @@ boutique or a studio). No lorem ipsum, no "Feature 1", no SaaS jargon.
 
 ## Imagery
 
-`<Media ratio subject label tone>` is the image. Pick a `subject` that fits (cup, bag, leaf, glass,
-product, person, space, device, chart, abstract) and vary `tone` across items. Never put text
-directly on a `Media`: text over imagery sits on a solid panel (`bg-bg/95`, `bg-primary`).
+`<Media ratio subject src label tone>` is the image. A `media` / `image` slot holds a photo
+description ("burlap bag of roasted coffee beans on oak"); the imagery service resolves it to a
+photograph in `node.props.images[slot][i]`, and `imageAt(node, slot, i)` supplies `src` (index `i`
+for list slots: collection tiles, gallery shots). Without a photo the art-directed silhouette
+renders, so always pass a `subject` fallback: `subjectOf(prop(node, "media", ""), "bag")` picks
+the first known subject word (cup, bag, leaf, glass, product, person, space, device, chart,
+abstract) and vary `tone` across items. Never put text directly on a `Media`: text over imagery
+sits on a solid panel (`bg-bg/95`, `bg-primary`).
 
 ## Variants and states
 

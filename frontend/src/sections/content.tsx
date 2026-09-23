@@ -4,18 +4,12 @@ import {
   ArrowUpRight, Award, Check, ChevronDown, Clock, Gift, Hand, Heart, Leaf, Mail, MapPin, MessageCircle, Navigation, Phone,
   Quote, Recycle, ShieldCheck, Sparkles, Truck,
 } from "lucide-react";
-import { Avatar, Button, Disclosure, Eyebrow, Field, Media, Section, SectionHeader, listProp, prop, range, variantOf } from "../ui";
+import { Avatar, Button, Disclosure, Eyebrow, Field, Media, Section, SectionHeader, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject } from "../ui";
 import { cn } from "../lib/cn";
 import type { RenderNode } from "../types";
 import type { NodeProps, SectionMap } from "./types";
 
 /* ------------------------------------------------------------------ shared helpers */
-type Subject = Parameters<typeof Media>[0]["subject"];
-const SUBJECTS = ["cup", "bag", "leaf", "glass", "abstract", "person", "space", "device", "chart", "product"];
-/** The `media` slot names what the image shows; a known subject picks the matching silhouette. */
-const subjectOf = (value: string, fallback: Subject): Subject =>
-  (SUBJECTS.includes(value) ? value : fallback) as Subject;
-
 /** Numbered slots (`body_1`, `answer_2`...) for long copy that may itself contain commas. */
 const nth = (n: RenderNode, key: string, i: number, fallback: string) => prop(n, `${key}_${i + 1}`, fallback);
 /** When the spec fills any numbered slot, only the filled ones render; otherwise the fallbacks do. */
@@ -134,6 +128,7 @@ function BrandStory({ node }: NodeProps) {
   const role = prop(node, "signature_role", "Founder");
   const cta = prop(node, "cta", "Read the full story");
   const subject = subjectOf(prop(node, "media", ""), "space");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", "The first shop, on a quiet morning");
   const dropCap = "first-letter:float-left first-letter:mr-3 first-letter:mt-1 first-letter:font-heading first-letter:text-[3.6em] first-letter:leading-[0.8]";
 
@@ -145,7 +140,7 @@ function BrandStory({ node }: NodeProps) {
           <h2 className="font-heading-set text-h1 text-balance lg:col-span-8">{title}</h2>
         </div>
         <div className="grid lg:grid-cols-12">
-          <Media ratio="16/10" subject={subject} label={label} className="shadow-lg lg:col-span-8 lg:col-start-1 lg:row-start-1" />
+          <Media ratio="16/10" subject={subject} src={src} label={label} className="shadow-lg lg:col-span-8 lg:col-start-1 lg:row-start-1" />
           <div className="relative z-10 mx-4 -mt-16 space-y-8 rounded-lg bg-bg p-8 shadow-xl md:mx-12 md:-mt-24 md:p-12 lg:col-span-5 lg:col-start-8 lg:row-start-1 lg:mx-0 lg:mt-0 lg:self-center">
             <p className={cn("text-lead text-pretty", dropCap)}>{body}</p>
             <PullQuote text={quote} small />
@@ -168,7 +163,7 @@ function BrandStory({ node }: NodeProps) {
           <Eyebrow>{eyebrow}</Eyebrow>
           <h2 className="font-heading-set text-h1 text-balance">{title}</h2>
         </div>
-        <Media ratio="21/9" subject={subject} label={label} className="mt-14 shadow-lg md:mt-20" />
+        <Media ratio="21/9" subject={subject} src={src} label={label} className="mt-14 shadow-lg md:mt-20" />
         <div className="mx-auto mt-14 grid max-w-5xl gap-10 md:mt-20 md:grid-cols-12">
           <p className={cn("text-lead text-pretty md:col-span-5", dropCap)}>{body}</p>
           <div className="space-y-8 md:col-span-6 md:col-start-7">
@@ -187,7 +182,7 @@ function BrandStory({ node }: NodeProps) {
     <Section label={eyebrow} wide>
       <div className="grid items-start gap-16 lg:grid-cols-12 lg:gap-12">
         <figure className="relative pb-12 pr-8 md:pr-16 lg:col-span-5 lg:pb-16 lg:pr-0">
-          <Media ratio="4/5" subject={subject} label={label} className="shadow-lg" />
+          <Media ratio="4/5" subject={subject} src={src} label={label} className="shadow-lg" />
           <Media ratio="1/1" subject="leaf" tone={2} label={prop(node, "detail_label", "A detail from the workshop")}
             className="absolute bottom-0 right-0 w-36 border-4 border-bg shadow-lg md:w-48 lg:-right-12" />
           <figcaption className="mt-4 max-w-[60%] text-caption text-muted">{label}</figcaption>
@@ -322,7 +317,7 @@ function EditorialQuote({ node }: NodeProps) {
     return (
       <Section label={label} wide>
         <figure className="grid items-center gap-12 md:grid-cols-12 md:gap-10">
-          <Media ratio="4/5" subject={subjectOf(prop(node, "media", ""), "person")} tone={1}
+          <Media ratio="4/5" subject={subjectOf(prop(node, "media", ""), "person")} src={imageAt(node, "media")?.url} tone={1}
             label={prop(node, "media_label", `Portrait of ${author}`)} className="md:col-span-5 lg:col-span-4 lg:col-start-2" />
           <div className="space-y-10 md:col-span-7 lg:col-span-6 lg:col-start-7">
             <Quote aria-hidden className="size-10 text-accent" strokeWidth={1.5} />
@@ -537,13 +532,14 @@ function ImageBand({ node }: NodeProps) {
   const caption = prop(node, "caption", "We moved in when the building was empty and the floors needed sanding. Most of what you see on the shelves is still finished within a few metres of this window.");
   const cta = prop(node, "cta", "Plan a visit");
   const subject = subjectOf(prop(node, "media", ""), "space");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", "The studio in late afternoon light");
 
   if (variant === "letterbox") {
     return (
       <Section label={eyebrow} wide size="sm">
         <figure>
-          <Media ratio="21/9" subject={subject} label={label} zoom={false} className="min-h-72" />
+          <Media ratio="21/9" subject={subject} src={src} label={label} zoom={false} className="min-h-72" />
           <figcaption className="mt-8 grid gap-6 border-t border-border pt-8 md:grid-cols-12">
             <Eyebrow className="md:col-span-3">{eyebrow}</Eyebrow>
             <h2 className="font-heading-set text-h3 text-balance md:col-span-5">{title}</h2>
@@ -560,7 +556,7 @@ function ImageBand({ node }: NodeProps) {
   return (
     <section aria-label={eyebrow} className="tone-default">
       <div className="relative md:min-h-[600px] lg:min-h-[720px]">
-        <Media ratio="4/3" subject={subject} label={label} zoom={false}
+        <Media ratio="4/3" subject={subject} src={src} label={label} zoom={false}
           className="rounded-none md:!absolute md:inset-0 md:h-full md:!aspect-auto" />
         <div className="page-x relative -mt-14 pb-10 md:absolute md:inset-x-0 md:bottom-0 md:mt-0 md:pb-14">
           <div className="container-wide">
@@ -885,7 +881,7 @@ function NewsletterSignup({ node }: NodeProps) {
     return (
       <Section label={title} tone="surface">
         <div className="mx-auto grid max-w-5xl overflow-hidden rounded-lg border border-border bg-bg shadow-lg md:grid-cols-5">
-          <Media ratio="4/5" subject={subjectOf(prop(node, "media", ""), "bag")} tone={1}
+          <Media ratio="4/5" subject={subjectOf(prop(node, "media", ""), "bag")} src={imageAt(node, "media")?.url} tone={1}
             label={prop(node, "media_label", "This month's letter, folded on the counter")}
             className="h-full rounded-none md:col-span-2 md:!aspect-auto" zoom={false} />
           <div className="space-y-6 p-8 md:col-span-3 md:p-12">
@@ -948,6 +944,7 @@ function FeatureSplit({ node }: NodeProps) {
   const icons = listProp(node, "icons", BENEFITS.map((b) => b.icon));
   const title = prop(node, "title", "Details you will only notice once you have them.");
   const subject = subjectOf(prop(node, "media", ""), "product");
+  const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", "A finished piece, ready to be wrapped");
   const Icon = (i: number) => ICONS[(icons[i] in ICONS ? icons[i] : BENEFITS[i % 4].icon) as IconName];
   const header = (
@@ -978,7 +975,7 @@ function FeatureSplit({ node }: NodeProps) {
           <div className="lg:col-span-6">{header}</div>
           <div className="lg:col-span-4 lg:col-start-9 lg:pb-2"><Button variant="secondary" arrow>{prop(node, "cta", "See how we work")}</Button></div>
         </div>
-        <Media ratio="21/9" subject={subject} label={label} className="mt-12 min-h-64 md:mt-16" />
+        <Media ratio="21/9" subject={subject} src={src} label={label} className="mt-12 min-h-64 md:mt-16" />
         <ul className="mt-12 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">{titles.map(item)}</ul>
       </Section>
     );
@@ -989,7 +986,7 @@ function FeatureSplit({ node }: NodeProps) {
       <div className="grid gap-12 lg:grid-cols-12 lg:gap-8">
         <div className={cn("lg:col-span-6 lg:self-start lg:sticky lg:top-24", right && "lg:order-2 lg:col-start-7")}>
           <div className="relative">
-            <Media ratio="4/5" subject={subject} label={label} className="shadow-lg" />
+            <Media ratio="4/5" subject={subject} src={src} label={label} className="shadow-lg" />
             <p className="absolute bottom-4 left-4 rounded-sm bg-bg/95 px-4 py-2 text-small font-medium text-fg shadow-md">{badge}</p>
           </div>
         </div>

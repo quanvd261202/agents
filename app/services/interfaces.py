@@ -51,6 +51,23 @@ class DesignBuilderService(Protocol):
     ) -> DesignSpec: ...
 
 
+class CopywriterService(Protocol):
+    async def write(
+        self,
+        req: ClarifiedRequirements,
+        screen: ScreenPlan,
+        direction: DesignDirection,
+        spec: DesignSpec,
+        brief: str = "",
+    ) -> DesignSpec: ...
+
+
+class ImageryService(Protocol):
+    """Sources photographs for the spec's image slots. Network, never an LLM."""
+
+    async def illustrate(self, spec: DesignSpec) -> DesignSpec: ...
+
+
 class DesignResolverService(Protocol):
     """Deterministic. Must not call an LLM."""
 

@@ -30,6 +30,7 @@ def fan_out_screens(state: AgentState) -> list[Send]:
             "screen",
             ScreenState(
                 run_id=state.get("run_id", ""),
+                user_requirement=state.get("user_requirement", ""),
                 clarified_requirements=req,
                 design_direction=direction,
                 screen=screen,
@@ -54,14 +55,17 @@ def route_after_fixer(state: ScreenState) -> Literal["resolver", "finalize"]:
 
 
 def build_screen_graph(svc: Services) -> Any:
-    """build -> resolve -> render -> verify, with the fix loop, for a single screen."""
+    """build -> write -> illustrate -> resolve -> render -> verify, with the fix loop, for one
+    screen."""
     g: StateGraph[ScreenState] = StateGraph(ScreenState)
     for name, fn in make_screen_nodes(svc).items():
         g.add_node(name, fn)  # type: ignore[call-overload]
 
     g.add_edge(START, "retrieval")
     g.add_edge("retrieval", "design_builder")
-    g.add_edge("design_builder", "resolver")
+    g.add_edge("design_builder", "copywriter")
+    g.add_edge("copywriter", "imagery")
+    g.add_edge("imagery", "resolver")
     g.add_edge("resolver", "renderer")
     g.add_edge("renderer", "verifier")
     g.add_conditional_edges(

@@ -219,6 +219,14 @@ class DesignResolver:
             animation = self._animations.resolve(intent, child_count=max(len(children), 1))
         props: dict[str, object] = {**comp.implementation.default_props, "variant": variant}
         props.update(s.content)
+        if s.images:
+            if unknown := set(s.images) - comp.slot_names():
+                raise ValidationError(
+                    f"invalid image slots for {comp.id}: {sorted(unknown)}", target=s.id
+                )
+            props["images"] = {
+                slot: [ref.model_dump() for ref in refs] for slot, refs in s.images.items()
+            }
         props["parts"] = [p.name for p in comp.implementation.parts]
         return RenderNode(
             id=s.id,

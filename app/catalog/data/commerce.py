@@ -3,6 +3,7 @@
 from app.catalog.data._helpers import (  # noqa: F401
     _ALL,
     _CARD_ANIMS,
+    _MEDIA,
     C,
     ComponentDefinition,
     DesignMetadata,
@@ -12,7 +13,6 @@ from app.catalog.data._helpers import (  # noqa: F401
 )
 
 _SHOP = ["ecommerce"]
-_MEDIA = "what the image shows: cup, bag, leaf, glass, product, space..."
 _LIST = "comma-separated"
 _OPTIONS = "comma-separated options; the single value 'hide' removes the group"
 _PRICES = "comma-separated price deltas matching the options, e.g. 0,0.60,1.10"
@@ -42,7 +42,7 @@ COMPONENTS: list[ComponentDefinition] = [
         supported_domains=_SHOP,
         variants=["standard", "premium", "compact"],
         slots=[
-            S(name="image", required=True),
+            S(name="image", required=True, description=_MEDIA),
             S(name="title", required=True),
             S(name="note"),
             S(name="price", required=True),
@@ -95,7 +95,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="rating", description="e.g. 4.8"),
             S(name="review_count"),
             S(name="badge"),
-            S(name="media", description=_MEDIA),
+            S(name="media", description="comma-separated gallery shots, up to 4: " + _MEDIA),
             S(name="sizes", description=_OPTIONS),
             S(name="temperatures", description=_OPTIONS),
             S(name="milks", description=_OPTIONS),
@@ -237,6 +237,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="continue_cta"),
             S(name="note"),
         ],
+        allowed_children=["product_card"],
         implementation=_impl(
             "CartItems",
             ("Image", "native"),
@@ -302,10 +303,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="collections", description=_LIST),
             S(name="counts", description="comma-separated, e.g. 24 products"),
             S(name="descriptions", description="comma-separated one-liners, same order"),
-            S(
-                name="media",
-                description="comma-separated subjects, same order: bag, leaf, glass...",
-            ),
+            S(name="media", description="comma-separated, one per collection tile: " + _MEDIA),
             S(name="tile_cta"),
         ],
         implementation=_impl(
@@ -544,6 +542,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="looks", description="comma-separated look titles"),
             S(name="captions", description="comma-separated look captions, same order"),
             S(name="products", description="comma-separated product names for the pins / links"),
+            S(name="prices", description="comma-separated prices, same order as products"),
             S(name="look_cta"),
         ],
         implementation=_impl(
