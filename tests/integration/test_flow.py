@@ -41,7 +41,7 @@ ITEMS = [
         price=f"${15 + i}.00",
         image="bag of roasted coffee beans on oak",
         tags=["single origin" if i % 2 else "blend", "medium" if i < 4 else "dark"],
-        attributes={"Roast": "medium", "Weight": "250 g"},
+        attributes=[{"label": "Roast", "value": "medium"}, {"label": "Weight", "value": "250 g"}],
     )
     for i in range(1, 7)
 ]

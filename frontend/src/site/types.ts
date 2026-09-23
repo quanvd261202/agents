@@ -12,7 +12,7 @@ export interface SiteMap { entry: string; screens: SiteScreen[] }
 
 export interface ContentItem {
   id: string; title: string; subtitle: string; price: string | null; badge: string | null; image: string;
-  tags: string[]; attributes: Record<string, string>;
+  tags: string[]; attributes: { label: string; value: string }[];
   /** A photograph found for this item on some screen, when there is one. */
   image_url?: string | null;
 }

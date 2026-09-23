@@ -348,8 +348,8 @@ function ShippingNote({ node }: { node: RenderNode }) {
 const SPECS = ["Origin: Responsibly sourced", "Made: In small batches", "Packaging: Recyclable, gift ready", "Dispatch: Within 2 working days"];
 
 function detailTabs(node: RenderNode, other?: ContentItem | null) {
-  const specs = other && Object.keys(other.attributes).length
-    ? Object.entries(other.attributes)
+  const specs = other && other.attributes.length
+    ? other.attributes.map((a) => [a.label, a.value])
     : listProp(node, "specs", SPECS).map((s) => { const [k, ...v] = s.split(":"); return [k.trim(), v.join(":").trim()]; });
   const tabs = [
     { id: "details", label: prop(node, "details_label", "Details"), content: (

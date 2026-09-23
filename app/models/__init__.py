@@ -1,4 +1,4 @@
-from app.models.content import Collection, ContentItem, ContentModel, ItemBinding
+from app.models.content import Attribute, Collection, ContentItem, ContentModel, ItemBinding
 from app.models.direction import DesignDirection, ScreenDirection
 from app.models.dsl import AnimationIntent, DesignSpec, ImageRef, LayoutIntent, SectionSpec
 from app.models.flow import DeadControl, FlowFixResult, FlowReport, FlowStep, SitePlanPatch
@@ -19,6 +19,7 @@ from app.models.verification import FixResult, Issue, Patch, VerificationResult
 
 __all__ = [
     "AnimationIntent",
+    "Attribute",
     "ClarifiedRequirements",
     "ClarifierOutput",
     "CartLine",

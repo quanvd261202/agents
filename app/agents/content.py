@@ -38,7 +38,7 @@ course), and `items`: {count} for the main collection, at least 4 for any other.
   to ten words, no brand names, no text in the picture
 - `tags`: 2-5 short lowercase facets a visitor filters or searches by (a category, a level, an
   origin, a skill), from one shared vocabulary across the collection so a filter narrows it
-- `attributes`: 2-5 "Label: value" facts a detail page shows (Roast: medium, Duration: 8 weeks)
+- `attributes`: 2-5 {{label, value}} facts a detail page shows (Roast: medium, Duration: 8 weeks)
 
 Write for this product and this audience. Specific beats generic. Never lorem ipsum, never
 "Product 1", never "[brand]". Vary the items: different prices, tags and badges, not one item

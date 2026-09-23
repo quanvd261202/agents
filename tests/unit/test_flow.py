@@ -260,7 +260,7 @@ def item(i: int, **over) -> ContentItem:
         price=f"${16 + i}",
         image="bag of roasted coffee beans on oak",
         tags=["single origin", "medium"],
-        attributes={"Roast": "medium"},
+        attributes=[{"label": "Roast", "value": "medium"}],
     )
     return ContentItem(**{**base, **over})
 

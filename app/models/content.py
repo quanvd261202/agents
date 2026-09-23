@@ -8,6 +8,14 @@ from pydantic import Field
 from app.models.common import StrictModel
 
 
+class Attribute(StrictModel):
+    """One fact about an item, e.g. Roast: medium. A list, not a dict: strict structured-output
+    schemas allow no free-form keys."""
+
+    label: str
+    value: str
+
+
 class ContentItem(StrictModel):
     #: Slug, unique within its collection; the `:id` in a per-item route.
     id: str
@@ -19,8 +27,8 @@ class ContentItem(StrictModel):
     image: str
     #: Short lowercase facets for filtering and search, e.g. "single origin", "b2", "speaking".
     tags: list[str] = Field(default_factory=list)
-    #: "Label: value" facts for a detail page, e.g. {"Level": "B2", "Duration": "8 weeks"}.
-    attributes: dict[str, str] = Field(default_factory=dict)
+    #: Facts for a detail page, e.g. Level: B2, Duration: 8 weeks.
+    attributes: list[Attribute] = Field(default_factory=list)
     #: The photograph a screen found for this item; set when the site is assembled, so the
     #: item's own page and the cart show the picture its card shows.
     image_url: str | None = None
