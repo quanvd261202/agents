@@ -13,8 +13,10 @@ from app.animation import default_animation_registry
 from app.catalog import default_component_registry
 from app.core.config import Settings
 from app.core.llm import build_llm_provider
+from app.db import build_run_repository
 from app.dsl import default_design_resolver
 from app.imagery import Illustrator, build_image_provider
+from app.learning.factory import build_learning_service
 from app.recipes import default_recipe_registry
 from app.renderer import PlaywrightRenderer
 from app.retrieval import build_retrieval_service
@@ -46,6 +48,7 @@ async def build_services(settings: Settings) -> Services:  # noqa: D103
     return Services(
         settings=settings,
         llm=llm,
+        runs=await build_run_repository(settings),
         clarifier=ClarifierAgent(llm, recipes, settings.max_clarifier_questions),
         planner=PlannerAgent(llm, recipes),
         director=DirectorAgent(llm, default_theme_registry(), recipes, animations),
@@ -62,4 +65,5 @@ async def build_services(settings: Settings) -> Services:  # noqa: D103
         renderer=PlaywrightRenderer(),
         verifier=VerifierAgent(vision, recipes),
         fixer=FixerAgent(llm, recipes, components, resolver),
+        learning=await build_learning_service(settings),
     )

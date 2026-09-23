@@ -345,6 +345,43 @@ async def test_builder_rejects_motion_the_component_cannot_do():
         await build_with(bad, bad, bad)
 
 
+async def test_builder_degrades_an_unsupported_entrance_instead_of_repairing():
+    """`fade_up` on a grid is an intent the component cannot take literally; like the resolver
+    does for the page default, it becomes the nearest entrance the component offers."""
+    picked = BuilderOutput(
+        sections=[
+            s.model_copy(update={"animation": "fade_up"}) if s.id == "reviews" else s
+            for s in VALID.sections
+        ]
+    )
+    spec, llm = await build_with(picked)
+    reviews = spec.find("reviews")
+    assert reviews is not None and reviews.animation is not None
+    assert reviews.animation.name == "fade_up"  # reviews supports it: kept as picked
+    assert len(llm.calls) == 1
+
+    grid = ScreenPlan(id="home", purpose="discovery")
+    direction = DIRECTION.model_copy(
+        update={"screens": [ScreenDirection(screen_id="home", recipe="ecommerce_home")]}
+    )
+    agent = builder()
+    agent._llm.push(  # type: ignore[attr-defined]
+        BuilderOutput(
+            sections=[
+                {"id": "navigation", "type": "navigation"},
+                {"id": "hero", "type": "hero"},
+                {"id": "featured_products", "type": "product_grid", "animation": "fade_up"},
+                {"id": "footer", "type": "footer"},
+            ]
+        )
+    )
+    spec = await agent.build(REQ, grid, direction, CONTEXT)
+    section = spec.find("featured_products")
+    assert section is not None and section.animation is not None
+    assert section.animation.name == "fade"  # the grid's nearest entrance, no repair round trip
+    assert len(agent._llm.calls) == 1  # type: ignore[attr-defined]
+
+
 async def test_builder_rejects_an_unknown_animation():
     bad = BuilderOutput(
         sections=[
@@ -371,7 +408,11 @@ async def test_bootstrap_wires_the_agent_chain_end_to_end():
     from app.core.config import Settings
 
     settings = Settings(
-        llm_provider="fake", embedding_provider="hashing", image_provider="fake", _env_file=None
+        llm_provider="fake",
+        embedding_provider="hashing",
+        image_provider="fake",
+        persistence="memory",
+        _env_file=None,
     )
     svc = await build_services(settings)
     llm: FakeLLMProvider = svc.llm  # type: ignore[assignment]

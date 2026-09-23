@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.agents import CopywriterAgent
-from app.agents.copywriter import CopyOutput, item_count
+from app.agents.copywriter import CopyOutput, SlotCopy, item_count
 from app.catalog import default_component_registry
 from app.core.exceptions import ValidationError
 from app.core.llm import FakeLLMProvider
@@ -61,6 +61,9 @@ ITEMS = [
 ]
 WRITTEN = CopyOutput(
     sections=[
+        {"id": "navigation", "slots": [{"slot": "logo", "text": "Ember & Leaf"}]},
+        {"id": "cta", "slots": [{"slot": "headline", "text": "Your first bag ships free"}]},
+        {"id": "footer", "slots": [{"slot": "tagline", "text": "Roasted in small batches"}]},
         {
             "id": "hero",
             "slots": [
@@ -110,19 +113,37 @@ async def test_copy_lands_in_content_and_items_become_product_cards():
     default_design_resolver().resolve(spec)  # raises if anything is unresolvable
 
 
-async def test_sections_the_writer_skipped_are_untouched():
+async def test_slots_the_writer_skipped_keep_their_defaults_and_structure_is_kept():
     spec, _ = await write(WRITTEN)
-    for sid in ("navigation", "cta", "footer"):
-        section = spec.find(sid)
-        assert section is not None
-        assert section.content == {} and section.children == []
+    cta = spec.find("cta")
+    assert cta is not None
+    assert cta.content == {"headline": "Your first bag ships free"}  # primary_cta left to default
+    assert cta.children == []
     assert [s.id for s in spec.sections] == [s.id for s in SPEC.sections]  # structure kept
 
 
+async def test_a_section_left_without_copy_is_sent_back():
+    """The component's built-in text is placeholder copy for another business, so a section that
+    offers readable slots must get its own words."""
+    quiet = CopyOutput(sections=[x for x in WRITTEN.sections if x.id != "footer"])
+    spec, llm = await write(quiet, WRITTEN)
+    assert spec.find("footer").content == {"tagline": "Roasted in small batches"}  # type: ignore[union-attr]
+    assert len(llm.calls) == 2
+    repair = llm.calls[1][-1].content
+    assert "no copy for ['footer']" in repair and "placeholder for another business" in repair
+
+
 async def test_blank_texts_are_dropped():
-    out = CopyOutput(sections=[{"id": "hero", "slots": [{"slot": "headline", "text": "   "}]}])
-    spec, _ = await write(out)
-    assert spec.find("hero").content == {}  # type: ignore[union-attr]
+    padded = CopyOutput(
+        sections=[
+            x.model_copy(update={"slots": [*x.slots, SlotCopy(slot="primary_cta", text="   ")]})
+            if x.id == "hero"
+            else x
+            for x in WRITTEN.sections
+        ]
+    )
+    spec, _ = await write(padded)
+    assert "primary_cta" not in spec.find("hero").content  # type: ignore[union-attr]
 
 
 async def test_item_counts_follow_what_the_component_shows():
@@ -142,6 +163,7 @@ async def test_prompt_lists_slots_with_formats_and_item_counts():
     assert "Product: Ember & Leaf (ecommerce), for home baristas" in user
     assert "Brand notes: warm, unhurried" in user
     assert "Key content: featured beans, brand story" in user
+    assert "Today: 20" in user  # the year footers and offers are written for
     assert "- hero (hero, variant" in user
     assert "media (the photograph to show" in user
     assert (

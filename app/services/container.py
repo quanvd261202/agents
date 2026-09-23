@@ -12,17 +12,20 @@ from app.services.interfaces import (
     DesignResolverService,
     FixerService,
     ImageryService,
+    LearningService,
     PlannerService,
     RendererService,
     RetrievalService,
     VerifierService,
 )
+from app.services.repositories import RunRepository
 
 
 @dataclass
 class Services:
     settings: Settings
     llm: LLMProvider
+    runs: RunRepository
     clarifier: ClarifierService
     planner: PlannerService
     director: DesignDirectorService
@@ -34,3 +37,4 @@ class Services:
     renderer: RendererService
     verifier: VerifierService
     fixer: FixerService
+    learning: LearningService

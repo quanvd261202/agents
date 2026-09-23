@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Literal
 
 from app.agents.base import Agent
@@ -10,11 +11,16 @@ from app.catalog.models import ComponentDefinition
 from app.catalog.registry import ComponentRegistry
 from app.core.exceptions import UIBuilderError, ValidationError
 from app.core.llm import LLMProvider
+from app.core.logging import get_logger
 from app.dsl.resolver import DesignResolver
+from app.learning.service import describe, signature
 from app.models.common import Density, Severity, StrictModel
 from app.models.dsl import AnimationIntent, DesignSpec, LayoutIntent, SectionSpec
+from app.models.learning import Lesson
 from app.models.verification import FixResult, Issue, Patch, VerificationResult
 from app.recipes.registry import RecipeRegistry
+
+log = get_logger(__name__)
 
 Property = Literal["variant", "type", "animation", "layout", "columns", "remove", "density"]
 
@@ -43,7 +49,12 @@ Issues to fix, most important first:
 {issues}
 
 Sections you may patch, with their allowed values:
-{sections}"""
+{sections}{lessons}"""
+
+LESSONS = """
+
+Lessons from earlier verified fixes on pages like this one; prefer them where they fit:
+{lines}"""
 
 
 class FixPatch(StrictModel):
@@ -75,11 +86,18 @@ class FixerAgent(Agent):
         self._components = components
         self._resolver = resolver
 
-    async def fix(self, spec: DesignSpec, verification: VerificationResult) -> FixResult:
+    async def fix(
+        self,
+        spec: DesignSpec,
+        verification: VerificationResult,
+        lessons: Sequence[Lesson] = (),
+    ) -> FixResult:
         issues = sorted(
             (i for i in verification.issues if i.severity in BLOCKING),
             key=lambda i: (i.severity != Severity.critical, not i.deterministic),
         )
+        if (learned := self._from_lessons(spec, issues, lessons)) is not None:
+            return learned
         allowed = self._patchable(spec, issues)
         out = await self._invoke(
             SYSTEM,
@@ -93,11 +111,61 @@ class FixerAgent(Agent):
                     for i in issues
                 ),
                 sections="\n".join(self._allowed_line(spec, s) for s in allowed),
+                lessons=LESSONS.format(lines="\n".join(f"- {describe(x)}" for x in lessons))
+                if lessons
+                else "",
             ),
             FixerOutput,
             lambda o: self._validate(o, spec, {s.id for s in allowed}),
         )
         return _to_result(out)
+
+    def _from_lessons(
+        self, spec: DesignSpec, issues: list[Issue], lessons: Sequence[Lesson]
+    ) -> FixResult | None:
+        """Trusted lessons are applied without a model call when, together, they match every
+        blocking issue (same component, same deterministic problem) and the patched spec still
+        resolves. Anything less goes to the model, with the lessons as hints."""
+        trusted = [x for x in lessons if x.status == "trusted"]
+        if not trusted or not issues:
+            return None
+        patches: list[Patch] = []
+        ids: set[str] = set()
+        for issue in issues:
+            section = spec.find(issue.target)
+            if section is None or not issue.deterministic:
+                return None
+            match = next(
+                (
+                    x
+                    for x in trusted
+                    if x.scope.get("component") == section.type
+                    and x.scope.get("problem") == signature(issue)
+                ),
+                None,
+            )
+            if match is None:
+                return None
+            patch = Patch(
+                target=issue.target, property=match.fix["property"], value=match.fix["value"]
+            )
+            if patch not in patches:
+                patches.append(patch)
+            ids.add(match.id)
+        fix = FixResult(
+            status="success",
+            patches=patches,
+            reason="applied trusted lessons",
+            source="lesson",
+            lesson_ids=sorted(ids),
+        )
+        try:
+            self._resolver.resolve(self.apply(spec, fix))
+        except UIBuilderError as e:
+            log.warning("fixer.lesson_rejected", error=str(e))
+            return None
+        log.info("fixer.from_lessons", screen=spec.screen_id, lessons=fix.lesson_ids)
+        return fix
 
     # -------------------------------------------------------------------------------------
     def _patchable(self, spec: DesignSpec, issues: list[Issue]) -> list[SectionSpec]:

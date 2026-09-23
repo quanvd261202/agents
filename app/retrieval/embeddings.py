@@ -76,19 +76,26 @@ class OpenAIEmbeddingProvider:
         batch_size: int = 128,
         api_key: str | None = None,
     ) -> None:
-        try:
-            from openai import AsyncOpenAI
-        except ImportError as e:  # pragma: no cover
-            raise ConfigurationError("openai is not installed") from e
-        kwargs: dict[str, Any] = {}
+        self._kwargs: dict[str, Any] = {}
         if base_url:
-            kwargs["base_url"] = base_url
+            self._kwargs["base_url"] = base_url
         if api_key:
-            kwargs["api_key"] = api_key
-        self._client = AsyncOpenAI(**kwargs)
+            self._kwargs["api_key"] = api_key
+        self._client: Any = None
         self._model = model
         self._dimensions = dimensions
         self._batch_size = batch_size
+
+    def _sdk(self) -> Any:
+        """Built on first use: listing lessons or checking a schema needs the dimensions, not a
+        key, so a missing OPENAI_API_KEY only fails when text is actually embedded."""
+        if self._client is None:
+            try:
+                from openai import AsyncOpenAI
+            except ImportError as e:  # pragma: no cover
+                raise ConfigurationError("openai is not installed") from e
+            self._client = AsyncOpenAI(**self._kwargs)
+        return self._client
 
     @property
     def dimensions(self) -> int:
@@ -99,7 +106,7 @@ class OpenAIEmbeddingProvider:
         return f"{self._model}-{self._dimensions}"
 
     async def _call(self, texts: Sequence[str]) -> list[list[float]]:
-        resp = await self._client.embeddings.create(
+        resp = await self._sdk().embeddings.create(
             model=self._model, input=list(texts), dimensions=self._dimensions
         )
         return [item.embedding for item in sorted(resp.data, key=lambda d: d.index)]

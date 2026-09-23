@@ -48,9 +48,13 @@ class RecipeValidator:
         recipe_order = {s.id: i for i, s in enumerate(recipe.sections)}
         sec = {s.id: s for s in recipe.sections}
         fixed = [i for i in ids if not sec[i].reorderable]
-        if fixed != sorted(fixed, key=recipe_order.__getitem__):
+        expected = sorted(fixed, key=recipe_order.__getitem__)
+        if fixed != expected:
+            # The model repairs from this message, so it must say which order is required.
             raise ValidationError(
-                f"required UX hierarchy violated for recipe {recipe.id}: {fixed}", target=recipe.id
+                f"required UX hierarchy violated for recipe {recipe.id}: fixed sections must "
+                f"keep the recipe order {expected}; got {fixed}",
+                target=recipe.id,
             )
         # reorderable sections must stay within the span of their group's fixed neighbours
         for i in ids:

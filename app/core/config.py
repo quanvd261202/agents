@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="UIB_", env_file=".env", extra="ignore")
 
     database_url: str = "postgresql+asyncpg://uib:uib@localhost:5432/uib"
+    # Where lessons, run stages and graph checkpoints live. `postgres` uses `database_url` and
+    # falls back to `memory` with a warning when the database does not answer.
+    persistence: Literal["postgres", "memory"] = "postgres"
 
     # LLM. Leave `llm_model` empty to take the provider's default from app.core.llm.DEFAULT_MODELS.
     llm_provider: Literal["openai", "anthropic", "fake"] = "openai"

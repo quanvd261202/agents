@@ -29,3 +29,7 @@ class FixResult(StrictModel):
     status: Literal["success", "failure"]
     patches: list[Patch] = Field(default_factory=list)
     reason: str | None = None
+    #: "model" when the fixer agent wrote the patches; "lesson" when trusted lessons were applied
+    #: deterministically and no model was called.
+    source: Literal["model", "lesson"] = "model"
+    lesson_ids: list[str] = Field(default_factory=list)

@@ -6,11 +6,11 @@ See `agentic-ui-builder-phase-prompts.md` for the full phase spec.
 
 ## Status
 
-Phases 01-15 complete and running end to end: foundation, all static registries, retrieval, the
+All 17 phases complete and running end to end: foundation, all static registries, retrieval, the
 LLM agent chain (Clarifier -> UX Planner -> Design Director -> Compact Design Builder ->
 Copywriter), imagery, the deterministic resolver (`DesignSpec` -> `RenderModel`), the browser
-renderer with deterministic checks, the screenshot Verifier and the targeted Fixer. Learning (16)
-is next.
+renderer with deterministic checks, the screenshot Verifier, the targeted Fixer, the learning
+system and the persisted, instrumented orchestration.
 
     uib run -y "An online shop selling specialty coffee beans and loose-leaf tea"
 
@@ -75,6 +75,29 @@ for the photographs before it captures. A description that finds nothing, or a p
 leaves the art-directed placeholder in place: a missing photo never fails a screen. Set
 `UIB_IMAGE_PROVIDER=none` to keep the placeholders.
 
+**Learning (M11, Phase 16).** The fix loop teaches the system. After every fix the verifier runs
+again, and each blocking issue a patch targeted either disappeared or did not: `app/learning`
+turns that into a lesson keyed by domain, page type, component and problem, where the problem is
+a deterministic check's text with breakpoints and measurements normalised away (a model's wording
+is only ever known by dimension). Lesson text is templated from registry ids and patch values, so
+nothing a user or a model wrote reaches the store. Repetition promotes: one confirmation is a
+`candidate` (kept quiet), two make it `validated`, three `trusted`, and violations that rival the
+confirmations demote it again. Validated lessons reach the Builder as advice lines and the Fixer as
+hints; a trusted lesson that matches every blocking issue is applied without a model call, and the
+deterministic resolver still has the last word. `uib lessons` lists what has been learned.
+
+**Orchestration (M12, Phase 17).** Every graph node is instrumented: model calls (tokens, model,
+latency), retrievals and renders record themselves into the node's collector and land in
+`usage`; each node's output is persisted as a stage of the run (`clarifier`, `home/design_builder`,
+`home/fixer`...) without screenshots or HTML. The graph runs under a LangGraph checkpointer keyed
+by the run id, so the clarification round trip sends only the answers on the second pass. `uib run`
+ends with a per-screen cost table, writes `summary.json` (status, issues, fixes, whether the fix
+came from a lesson or the model, tokens, render time, and an `accepted` verdict per screen and for
+the run) and exits non-zero when any screen is not accepted. `uib stages <run>` lists a run's
+persisted stages. `UIB_PERSISTENCE=postgres` (the default) keeps lessons, stages and checkpoints in
+`UIB_DATABASE_URL`; when the database does not answer, a warning is logged and the run continues
+in memory.
+
 Every planned screen is built. Clarifier, Planner and Director run once per product; the Director
 assigns each planned screen a recipe (`DesignDirection.screens`), and the graph fans out one
 retrieval -> build -> write -> illustrate -> resolve -> render -> verify/fix subgraph per screen.
@@ -104,10 +127,10 @@ deterministic test URLs, `none` for the placeholders).
 
 ```
 app/
-  core/       config, logging, exceptions, LLM abstraction (LLMProvider protocol)
+  core/       config, logging, telemetry, exceptions, LLM abstraction (LLMProvider protocol)
   models/     Pydantic models for every stage; models/dsl.py is the central DesignSpec contract
   services/   service + repository Protocols, DI container (Services)
-  graph/      AgentState, thin LangGraph nodes, graph builder with conditional routing
+  graph/      AgentState, thin instrumented LangGraph nodes, graph builder, checkpointer, summary
   agents/     Phase 07-10, 14, 15 (LLM agents) and the M10 Copywriter
   imagery/    M10 stock photo providers (Pexels, fake) and the service that fills image slots
   catalog/    Phase 02 semantic component registry + implementation mappings (data/components.py)
@@ -119,13 +142,14 @@ app/
   renderer/   Phase 13 static server, Playwright driver, deterministic DOM checks (checks.js)
   retrieval/  Phase 06 embeddings (OpenAI + offline hashing), in-memory and pgvector stores,
               registry indexer, filtered search, context budget
-  db/         async SQLAlchemy engine and session factory
+  db/         async SQLAlchemy engine and session factory, run stages (memory, Postgres)
   verifier/   Phase 14 deterministic checks
-  learning/   Phase 16 lessons
+  learning/   Phase 16 lessons: mining, lifecycle, stores (memory, pgvector)
 ```
 
 Rules enforced by `import-linter`: `app.dsl`, `app.layout`, `app.animation`, `app.catalog`, `app.tokens`,
-`app.recipes`, `app.renderer`, `app.imagery` may never import the LLM layer.
+`app.recipes`, `app.renderer`, `app.imagery` may never import the LLM layer. (`app.learning` calls no
+model either, but like `app.retrieval` it embeds text, so it sits outside the contract.)
 
 All registries share `app.core.registry.BaseRegistry` (register/get/exists/list/filter, duplicate-id guard).
 
@@ -186,4 +210,6 @@ screen:  retrieval → design_builder → copywriter → imagery → resolver �
                                                                      fixer ─(failure)→ finalize
 ```
 
-Fixes per screen are capped by `UIB_MAX_DESIGN_ITERATIONS` (default 3).
+Fixes per screen are capped by `UIB_MAX_DESIGN_ITERATIONS` (default 3). Before the fixer calls a
+model it asks the learning service for confirmed lessons about the reported issues; after the next
+verification the learning service records which patches worked.

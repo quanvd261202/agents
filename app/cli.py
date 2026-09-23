@@ -23,30 +23,39 @@ def run(
     configure_logging(settings.log_level)
     from app.bootstrap import build_services
     from app.graph.builder import build_graph
+    from app.graph.checkpoint import checkpointer_for
+    from app.graph.summary import format_summary, summarize
 
     async def go() -> dict[str, Any]:
-        graph = build_graph(await build_services(settings))
-        state: dict[str, Any] = {"run_id": str(uuid.uuid4()), "user_requirement": requirement}
-        # The clarifier may not ask twice once answers exist, so this is at most two passes.
-        while True:
-            state = await graph.ainvoke(state)
-            out = state.get("clarifier_output")
-            if out is None or out.status != "needs_clarification":
-                return state
-            state["user_answers"] = _answer(out.questions, yes)
+        svc = await build_services(settings)
+        run_id = str(uuid.uuid4())
+        async with checkpointer_for(settings) as saver:
+            graph = build_graph(svc, saver)
+            config = {"configurable": {"thread_id": run_id}}
+            payload: dict[str, Any] = {"run_id": run_id, "user_requirement": requirement}
+            # The clarifier may not ask twice once answers exist, so this is at most two passes.
+            while True:
+                state: dict[str, Any] = await graph.ainvoke(payload, config)
+                out = state.get("clarifier_output")
+                if out is None or out.status != "needs_clarification":
+                    return state
+                # The checkpoint holds everything else: only the answers travel the second time.
+                payload = {"user_answers": _answer(out.questions, yes)}
 
     state = asyncio.run(go())
     run_dir = out / state["run_id"][:8]
-    failed = 0
     for screen in state.get("screens") or []:
         if screen.get("errors"):
-            failed += 1
             typer.echo(f"{screen['screen'].id}: FAILED - {screen['errors'][-1]}", err=True)
             continue
         typer.echo(_save_screen(run_dir, screen))
+    summary = summarize(state)
     if state.get("screens"):
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+        typer.echo("\n" + format_summary(summary))
         typer.echo(f"\nwrote {run_dir}/")
-    if failed:
+    if not summary["accepted"]:
         raise typer.Exit(1)
 
 
@@ -200,6 +209,48 @@ def gallery(
     typer.echo(f"\n{len(comps)} components -> {target}/   (uib view {target})")
     if blocking:
         raise typer.Exit(1)
+
+
+@cli.command()
+def lessons(
+    status: str | None = typer.Option(None, help="Only candidate, validated or trusted"),
+) -> None:
+    """List what the fix loop has learned: each rule with its status and confirmations."""
+    from app.learning.factory import build_lesson_repository
+
+    settings = get_settings()
+    configure_logging("WARNING")
+
+    async def go() -> list[Any]:
+        return await (await build_lesson_repository(settings)).list_all()
+
+    rows = [x for x in asyncio.run(go()) if status is None or x.status == status]
+    for x in rows:
+        typer.echo(
+            f"{x.status:<9} {x.confirmations:>3}x confirmed {x.violations:>2}x violated  {x.text}"
+        )
+    typer.echo(f"\n{len(rows)} lesson(s)")
+
+
+@cli.command()
+def stages(
+    run: str = typer.Argument(..., help="A run id, or a runs/<id> directory with a summary.json"),
+) -> None:
+    """List the persisted stages of a run, in order, with what each one produced."""
+    from app.db import build_run_repository
+
+    settings = get_settings()
+    configure_logging("WARNING")
+    path = Path(run)
+    run_id = json.loads((path / "summary.json").read_text())["run_id"] if path.is_dir() else run
+
+    async def go() -> list[tuple[str, dict[str, object]]]:
+        return await (await build_run_repository(settings)).stages(run_id)
+
+    rows = asyncio.run(go())
+    for stage, payload in rows:
+        typer.echo(f"{stage:<28} {', '.join(payload) or '-'}")
+    typer.echo(f"\n{len(rows)} stage(s) for run {run_id}")
 
 
 def _answer(questions: list[Any], accept_defaults: bool) -> dict[str, str]:

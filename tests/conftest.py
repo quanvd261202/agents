@@ -4,6 +4,7 @@ import pytest
 
 from app.core.config import Settings
 from app.core.llm import FakeLLMProvider
+from app.db import InMemoryRunRepository
 from app.models import (
     ClarifiedRequirements,
     ClarifierOutput,
@@ -128,7 +129,7 @@ class StubServices:
             )
         return VerificationResult(status="pass")
 
-    async def fix(self, spec, verification):
+    async def fix(self, spec, verification, lessons=()):
         self.calls.append("fix")
         if not self.fixer_ok:
             return FixResult(status="failure", reason="cannot")
@@ -139,14 +140,31 @@ class StubServices:
     def apply(self, spec, fix):
         return spec
 
+    async def advise(self, req, direction, recipe):
+        self.calls.append("advise")
+        return []
+
+    async def suggest(self, spec, verification, domain):
+        self.calls.append("suggest")
+        return []
+
+    async def learn(self, before, fix, after, spec, domain, run_id=""):
+        self.calls.append("learn")
+        return []
+
 
 def make_services(stub: StubServices, max_iter: int = 3) -> Services:
     settings = Settings(
-        llm_provider="fake", image_provider="none", max_design_iterations=max_iter, _env_file=None
+        llm_provider="fake",
+        image_provider="none",
+        persistence="memory",
+        max_design_iterations=max_iter,
+        _env_file=None,
     )
     return Services(
         settings=settings,
         llm=FakeLLMProvider(),
+        runs=InMemoryRunRepository(),
         clarifier=stub,
         planner=stub,
         director=stub,
@@ -158,6 +176,7 @@ def make_services(stub: StubServices, max_iter: int = 3) -> Services:
         renderer=stub,
         verifier=stub,
         fixer=stub,
+        learning=stub,
     )
 
 

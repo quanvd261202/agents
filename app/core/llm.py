@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Sequence
+import asyncio
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
 from app.core.exceptions import ConfigurationError, LLMError, StructuredOutputError
+from app.core.logging import get_logger
+
+log = get_logger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -68,13 +72,50 @@ class FakeLLMProvider:
         return LLMResult(value=str(item), usage=LLMUsage(model="fake"))
 
 
-async def _call[R](call: Awaitable[R]) -> R:
+#: Waits between attempts after a rate limit. The SDK's own retries honour a sub-second
+#: retry-after and give up within seconds, which never outlasts a tokens-per-minute window when
+#: several screens share it; these do.
+RATE_LIMIT_BACKOFF_S: tuple[float, ...] = (2, 5, 10, 20, 40)
+
+
+#: A small model occasionally degenerates into a repeating structured output until it hits the
+#: token cap. Sampling again almost always clears it, so a runaway is retried this many times.
+RUNAWAY_RETRIES = 2
+#: Caps a runaway early: the largest legitimate output (a copywriter pass over a dense page) is a
+#: few thousand tokens.
+MAX_OUTPUT_TOKENS = 8192
+
+
+def _is_rate_limit(e: BaseException) -> bool:
+    return type(e).__name__ == "RateLimitError" or getattr(e, "status_code", None) == 429
+
+
+def _is_runaway(e: BaseException) -> bool:
+    return type(e).__name__ == "LengthFinishReasonError"
+
+
+async def _call[R](
+    make_call: Callable[[], Awaitable[R]],
+    *,
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> R:
     """Provider SDK failures (rate limits, timeouts, auth) surface as the project's LLMError, so
-    the graph can fail one screen instead of the whole run."""
-    try:
-        return await call
-    except Exception as e:  # noqa: BLE001
-        raise LLMError(f"{type(e).__name__}: {e}") from e
+    the graph can fail one screen instead of the whole run. A rate limit is retried with growing
+    waits first, because it clears on its own; a runaway output is sampled again."""
+    runaways = 0
+    for wait in (*RATE_LIMIT_BACKOFF_S, None):
+        try:
+            return await make_call()
+        except Exception as e:  # noqa: BLE001
+            if _is_runaway(e) and runaways < RUNAWAY_RETRIES:
+                runaways += 1
+                log.warning("llm.runaway_output", attempt=runaways)
+                continue
+            if wait is None or not _is_rate_limit(e):
+                raise LLMError(f"{type(e).__name__}: {e}") from e
+            log.warning("llm.rate_limited", wait_s=wait, error=str(e)[:160])
+            await sleep(wait)
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 class OpenAILLMProvider:
@@ -93,7 +134,12 @@ class OpenAILLMProvider:
             raise ConfigurationError("langchain-openai is not installed") from e
         self._model_name = model
         # Retries back off on 429s, honouring the server's retry-after.
-        kwargs: dict[str, Any] = {"model": model, "temperature": temperature, "max_retries": 6}
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "temperature": temperature,
+            "max_retries": 6,
+            "max_tokens": MAX_OUTPUT_TOKENS,
+        }
         if base_url:
             kwargs["base_url"] = base_url
         if api_key:
@@ -112,7 +158,7 @@ class OpenAILLMProvider:
         runnable = self._chat.with_structured_output(
             schema, method="json_schema", strict=True, include_raw=True
         )
-        out = await _call(runnable.ainvoke(self._to_lc(messages)))
+        out = await _call(lambda: runnable.ainvoke(self._to_lc(messages)))
         if not isinstance(out, dict):
             raise StructuredOutputError("structured output did not return a raw/parsed dict")
         parsed = out.get("parsed")
@@ -124,7 +170,7 @@ class OpenAILLMProvider:
         import time
 
         start = time.perf_counter()
-        out = await _call(self._chat.ainvoke(self._to_lc(messages)))
+        out = await _call(lambda: self._chat.ainvoke(self._to_lc(messages)))
         return LLMResult(value=str(out.content), usage=self._usage(out, start))
 
     def _usage(self, raw: Any, start: float) -> LLMUsage:
@@ -162,7 +208,7 @@ class AnthropicLLMProvider:
 
         start = time.perf_counter()
         runnable = self._chat.with_structured_output(schema, include_raw=True)
-        out = await _call(runnable.ainvoke(self._to_lc(messages)))
+        out = await _call(lambda: runnable.ainvoke(self._to_lc(messages)))
         if not isinstance(out, dict):
             raise StructuredOutputError("structured output did not return a raw/parsed dict")
         parsed = out.get("parsed")
@@ -182,7 +228,7 @@ class AnthropicLLMProvider:
         import time
 
         start = time.perf_counter()
-        out = await _call(self._chat.ainvoke(self._to_lc(messages)))
+        out = await _call(lambda: self._chat.ainvoke(self._to_lc(messages)))
         meta = getattr(out, "usage_metadata", None) or {}
         usage = LLMUsage(
             input_tokens=meta.get("input_tokens", 0),

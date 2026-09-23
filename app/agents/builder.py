@@ -9,6 +9,7 @@ from app.animation.registry import AnimationRegistry
 from app.catalog.registry import ComponentRegistry
 from app.core.exceptions import ValidationError
 from app.core.llm import LLMProvider
+from app.core.logging import get_logger
 from app.dsl.choreography import allowed_motion
 from app.dsl.resolver import PAGE_ANIMATION_ALIASES
 from app.models.common import Intensity, StrictModel
@@ -20,6 +21,8 @@ from app.recipes.models import RecipeDefinition
 from app.recipes.registry import RecipeRegistry
 from app.recipes.resolver import RecipeValidator
 from app.retrieval.models import RetrievedContext
+
+log = get_logger(__name__)
 
 SYSTEM = """You compose one screen as a compact semantic Design DSL.
 
@@ -156,7 +159,8 @@ class DesignBuilderAgent(Agent):
         self, out: BuilderOutput, screen_id: str, direction: DesignDirection
     ) -> BuilderOutput:
         out = self._fill_fixed_slots(out, self._recipes.get(direction.recipe_for(screen_id)))
-        for s in out.sections:
+        sections = list(out.sections)
+        for i, s in enumerate(sections):
             if s.animation is None:
                 continue
             if not self._animations.exists(s.animation):
@@ -166,14 +170,28 @@ class DesignBuilderAgent(Agent):
             if not self._components.exists(s.type):
                 continue  # the recipe validator below owns the unknown-type message
             allowed = allowed_motion(self._components.get(s.type))
-            if s.animation not in allowed:
+            if s.animation in allowed:
+                continue
+            fallback = self._entrance_fallback(s.animation, allowed)
+            if fallback is None:
                 raise ValidationError(
                     f"'{s.type}' does not support animation '{s.animation}'; allowed: {allowed}",
                     target=s.id,
                 )
+            # An entrance is an intent, not a behaviour: like the resolver does for the page
+            # default, degrade it to what the component can do instead of a repair round trip.
+            log.info("builder.animation_degraded", section=s.id, wanted=s.animation, got=fallback)
+            sections[i] = s.model_copy(update={"animation": fallback})
+        if sections != out.sections:
+            out = BuilderOutput(sections=sections)
         # The recipe validator owns slot membership, component types, variants and ordering.
         self._validator.validate(self._assemble(out, screen_id, direction))
         return out
+
+    def _entrance_fallback(self, animation: str, allowed: list[str]) -> str | None:
+        if self._animations.get(animation).category != "entrance":
+            return None
+        return next((a for a in ("fade_up", "fade", "stagger", "none") if a in allowed), None)
 
     @staticmethod
     def _fill_fixed_slots(out: BuilderOutput, recipe: RecipeDefinition) -> BuilderOutput:

@@ -93,7 +93,7 @@ async def test_sourced_photographs_render_and_placeholders_fill_the_gaps(tmp_pat
             model
         )
     html = out.result.html or ""
-    # hero (1) + two collection tiles + two cards with photos = 5 pictures; the rest are placeholders
+    # hero + two collection tiles + two cards with photos = 5 pictures; the rest are placeholders
     assert len(re.findall(r"<img[^>]+src=\"data:image/svg\+xml", html)) == 5
     assert "Roast No. 3" in html and "Roast No. 1" in html  # real product copy, not the samples
     assert "Nº1 Signature" not in html

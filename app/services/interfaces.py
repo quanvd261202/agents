@@ -1,5 +1,6 @@
 """Service boundaries. LangGraph nodes call these; implementations live in their own packages."""
 
+from collections.abc import Sequence
 from typing import Protocol
 
 from app.models import (
@@ -8,6 +9,8 @@ from app.models import (
     DesignDirection,
     DesignSpec,
     FixResult,
+    LearningEvent,
+    Lesson,
     RenderModel,
     RenderResult,
     ScreenPlan,
@@ -85,6 +88,33 @@ class VerifierService(Protocol):
 
 
 class FixerService(Protocol):
-    async def fix(self, spec: DesignSpec, verification: VerificationResult) -> FixResult: ...
+    async def fix(
+        self,
+        spec: DesignSpec,
+        verification: VerificationResult,
+        lessons: Sequence[Lesson] = (),
+    ) -> FixResult: ...
 
     def apply(self, spec: DesignSpec, fix: FixResult) -> DesignSpec: ...
+
+
+class LearningService(Protocol):
+    """Phase 16. Deterministic: mines lessons from verified fixes and hands confirmed ones back."""
+
+    async def advise(
+        self, req: ClarifiedRequirements, direction: DesignDirection, recipe: str
+    ) -> list[str]: ...
+
+    async def suggest(
+        self, spec: DesignSpec, verification: VerificationResult, domain: str
+    ) -> list[Lesson]: ...
+
+    async def learn(
+        self,
+        before: VerificationResult,
+        fix: FixResult,
+        after: VerificationResult,
+        spec: DesignSpec,
+        domain: str,
+        run_id: str = "",
+    ) -> list[LearningEvent]: ...

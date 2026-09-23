@@ -7,6 +7,8 @@ change what the page is, only what it says."""
 
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import Field
 
 from app.agents.base import Agent, brief_block
@@ -36,16 +38,22 @@ Rules:
   subject, setting and mood in four to ten words, no brand names, no text in the picture. Where
   the slot asks for a list, comma-separate one description per entry (one per gallery shot, one
   per tile).
-- Fill the slots that carry product-specific content. Skip a slot to keep the component's own
-  default label; skip rather than pad.
-- A section marked `items: N product cards` takes `items`: N products, each with a title, a short
-  note, a price, an optional badge (New, Bestseller, Limited...) and an image description.
+- Every section gets copy. A component's built-in text is placeholder copy for a different
+  business, so every slot the visitor reads (logo, headline, title, subhead, subtitle, body,
+  description, tagline, items, calls to action) is written for every section listed. Only UI
+  labels (size_label, sort_label...) may be left to their defaults.
+- Only a section marked `items: N product cards` takes `items` (a field of the section beside
+  `slots`, never a slot name): N products, each with a title, a short note, a price, an optional
+  badge (New, Bestseller, Limited...) and an image description. Every other section leaves
+  `items` empty.
+- Write only for the sections listed below, by their exact ids.
 - Names, prices, currency and voice stay consistent across the whole screen."""
 
 USER = """Product: {product} ({domain}), for {audience}. Goal: {goal}
 Key features: {features}
 Brand notes: {brand}
 Visual direction: {style}
+Today: {today}
 
 Screen: {screen_id} - {purpose}
 Key content: {content}
@@ -56,6 +64,12 @@ Sections and their slots, `name (format)`:
 
 #: The one component that lists products; sections allowing it as a child take `items`.
 ITEM_CHILD = "product_card"
+#: Slots whose text the visitor reads as the product's own words. A section offering any of
+#: them must receive copy, or its component's placeholder text (written for another business)
+#: would ship as if it were content.
+READ_SLOTS = frozenset(
+    {"logo", "headline", "title", "subhead", "subtitle", "body", "description", "tagline"}
+)
 
 
 class SlotCopy(StrictModel):
@@ -117,6 +131,7 @@ class CopywriterAgent(Agent):
             features=", ".join(req.key_features) or "(none stated)",
             brand=req.brand_notes or "(none stated)",
             style=direction.visual_style,
+            today=date.today().isoformat(),
             screen_id=screen.id,
             purpose=screen.purpose,
             content=", ".join(screen.key_content) or "(not specified)",
@@ -172,6 +187,20 @@ class CopywriterAgent(Agent):
                 raise ValidationError(
                     f"placeholder copy in '{sc.id}': write the real words", target=sc.id
                 )
+        written = {sc.id: {c.slot for c in sc.slots if c.text.strip()} for sc in out.sections}
+        silent = [
+            s.id
+            for s in spec.sections
+            if (readable := READ_SLOTS & self._components.get(s.type).slot_names())
+            and not (written.get(s.id, set()) & readable)
+        ]
+        if silent:
+            raise ValidationError(
+                f"no copy for {silent}: each needs its own words in at least one of "
+                f"{sorted(READ_SLOTS)}; the component's built-in text is a placeholder for "
+                "another business",
+                target=silent[0],
+            )
         return out
 
     @staticmethod

@@ -24,12 +24,13 @@ const MOTION_CSS = `
 function Logo({ name, mark = true, className }: { name: string; mark?: boolean; className?: string }) {
   return (
     <a href="#top" aria-label={`${name}, home`}
-      className={cn("inline-flex min-h-11 shrink-0 items-center gap-2.5 rounded-button font-heading-set text-h4 leading-none text-fg", className)}>
+      className={cn("inline-flex min-h-11 min-w-0 items-center gap-2.5 rounded-button font-heading-set text-h4 leading-none text-fg", className)}>
       {mark && (
-        <span aria-hidden className="grid size-8 place-items-center rounded-button bg-primary text-small font-bold text-primary-fg">
+        <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-button bg-primary text-small font-bold text-primary-fg">
           {name.trim().charAt(0).toUpperCase()}
         </span>)}
-      <span className="whitespace-nowrap">{name}</span>
+      {/* A long wordmark gives way to the actions on a phone instead of pushing them off the edge. */}
+      <span className="truncate">{name}</span>
     </a>
   );
 }

@@ -454,6 +454,9 @@ function ChartPanel({ node }: NodeProps) {
   const delta = prop(node, "delta", s.delta);
   const series: Series[] = [{ name: names[0] ?? title, values: a, tone: "accent" }];
   if (variant === "line" && b.length) series.push({ name: names[1] ?? "Previous period", values: b, tone: "muted" });
+  // Axis values read as money only when the panel is about money: a lessons-per-week chart must not say "$3".
+  const headline = prop(node, "value", s.value);
+  const format = /[$€£¥]/.test(headline) || /revenue|sales|income|spend|cost|price|mrr|arr|payout/i.test(title) ? money : compact;
 
   return (
     <Panel label={title}>
@@ -468,8 +471,8 @@ function ChartPanel({ node }: NodeProps) {
             <Legend series={series} />
           </div>)}
         {variant === "donut"
-          ? <Donut labels={labels} values={a} total={prop(node, "value", s.value)} totalLabel={prop(node, "note", "Total revenue")} format={s.format} label={title} />
-          : <XYChart kind={variant} labels={labels} series={series} format={s.format} label={title} height={variant === "bar" ? 220 : 240} />}
+          ? <Donut labels={labels} values={a} total={prop(node, "value", s.value)} totalLabel={prop(node, "note", "Total revenue")} format={format} label={title} />
+          : <XYChart kind={variant} labels={labels} series={series} format={format} label={title} height={variant === "bar" ? 220 : 240} />}
       </PanelCard>
     </Panel>
   );

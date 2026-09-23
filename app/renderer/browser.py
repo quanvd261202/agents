@@ -11,6 +11,7 @@ from typing import Any
 
 from app.core.exceptions import RenderError
 from app.core.logging import get_logger
+from app.core.telemetry import record
 from app.models.common import Breakpoint, Dimension, Severity
 from app.models.render import RenderModel, RenderResult
 from app.models.verification import Issue
@@ -190,6 +191,7 @@ class PlaywrightRenderer:
             ms=round(result.render_time_ms),
             findings=len(findings),
         )
+        record("render", ms=round(result.render_time_ms, 1), findings=len(findings))
         return RenderOutput(result=result, findings=findings, outline=outline)
 
     async def _screenshot(self, page: Any, screen_id: str, bp: Breakpoint) -> str:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.logging import get_logger
+from app.core.telemetry import record
 from app.models.direction import DesignDirection
 from app.models.requirements import ClarifiedRequirements
 from app.retrieval.embeddings import EmbeddingProvider
@@ -126,7 +127,15 @@ class RetrievalService:
             recipes=[h.document.summary for h in recipes],
             lessons=(lessons or [])[: self._budget.max_lessons],
         )
-        return self._apply_budget(context)
+        context = self._apply_budget(context)
+        record(
+            "retrieval",
+            components=len(context.components),
+            layouts=len(context.layouts),
+            lessons=len(context.lessons),
+            tokens=context.estimated_tokens,
+        )
+        return context
 
     def _apply_budget(self, ctx: RetrievedContext) -> RetrievedContext:
         """Trim least-relevant entries until the whole context fits. Recipes are kept first
