@@ -1,5 +1,5 @@
 /** Commerce sections. Keys are the catalog's implementation.root names. See sections/README.md. */
-import { Children, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Children, isValidElement, useMemo, useState, type FormEvent, type ReactElement, type ReactNode } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import * as ToggleGroup from "@radix-ui/react-toggle-group";
 import {
@@ -8,9 +8,13 @@ import {
 } from "lucide-react";
 import {
   Avatar, Badge, Button, Card, Carousel, ChoiceChips, Disclosure, Eyebrow, Media, Price, QuantityStepper, Rating,
-  Section, SectionHeader, Tabs, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject,
+  Section, SectionHeader, Tabs, hrefOf, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject,
 } from "../ui";
 import { cn } from "../lib/cn";
+import { filterItems, findItem, useCollection, useItem, useItemHref, useRouteItem, useSite } from "../site/context";
+import { navigate } from "../site/router";
+import { runtime, useRuntime } from "../site/store";
+import type { ContentItem } from "../site/types";
 import type { RenderNode } from "../types";
 import type { NodeProps, SectionMap } from "./types";
 
@@ -41,6 +45,12 @@ const money = (s: string) => { const m = s.replace(",", ".").match(/-?\d+(?:\.\d
 const currencyOf = (s: string) => s.match(/^[^\d-]*/)?.[0].trim() || "$";
 const fmt = (n: number, cur: string) => `${cur}${n.toFixed(2)}`;
 const at = <T,>(list: T[], i: number, fallback: T): T => (list.length ? list[i % list.length] : fallback);
+/** The content-model item a rendered child (a product card) is bound to, if any. */
+const boundItem = (child: ReactNode): string | undefined => {
+  if (!isValidElement(child)) return undefined;
+  const node = (child as ReactElement<{ node?: RenderNode }>).props.node;
+  return (node?.props.binding as { item: string } | undefined)?.item;
+};
 
 const chipCls =
   "inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-button border border-border px-4 text-small font-medium " +
@@ -157,17 +167,26 @@ function ProductCard({ node, index }: NodeProps & { index?: number }) {
   const subject = s ? s.subject : subjectOf(prop(node, "image", ""), "product");
   const src = imageAt(node, "image")?.url;
   const variant = variantOf(node);
+  // M13: a bound card links to its own page (a stretched link, so the buttons stay separate
+  // controls) and Quick add puts the item in the live cart.
+  const href = hrefOf(node, "card");
+  const binding = node.props.binding as { item: string } | undefined;
+  const { site } = useSite();
+  const quickAdd = () => { if (site && binding) runtime.addToCart(binding.item); };
+  const name = href
+    ? <a href={href} data-role="card" className="after:absolute after:inset-0 after:z-[1] after:content-['']">{title}</a>
+    : title;
 
   if (variant === "compact") {
     return (
-      <article className="group flex items-center gap-4 rounded-card border border-border bg-surface p-3 transition-colors hover:border-fg/25">
+      <article className="group relative flex items-center gap-4 rounded-card border border-border bg-surface p-3 transition-colors hover:border-fg/25">
         <Media ratio="1/1" subject={subject} src={src} tone={i} label={title} className="w-20 shrink-0 rounded-sm" />
         <div className="min-w-0 flex-1">
-          <h3 className="truncate font-semibold">{title}</h3>
+          <h3 className="truncate font-semibold">{name}</h3>
           {note && <p className="truncate text-small text-muted">{note}</p>}
           <Price value={price} className="mt-1 text-small" />
         </div>
-        <Button size="icon" variant="secondary" aria-label={`Add ${title} to cart`}><Plus className="size-4" /></Button>
+        <Button size="icon" variant="secondary" aria-label={`Add ${title} to cart`} onClick={quickAdd} data-cart-add="" className="relative z-[2]"><Plus className="size-4" /></Button>
       </article>
     );
   }
@@ -178,15 +197,15 @@ function ProductCard({ node, index }: NodeProps & { index?: number }) {
         <Media ratio={premium ? "4/5" : "1/1"} subject={subject} src={src} tone={i} label={title}
           className={cn("transition-shadow duration-500 ease-brand group-hover:shadow-lg", !premium && "rounded-card")} />
         {badge && <Badge tone={badgeTone(badge)} className="absolute left-3 top-3">{badge}</Badge>}
-        <FavoriteButton title={title} className="absolute right-3 top-3" />
+        <FavoriteButton title={title} className="absolute right-3 top-3 z-[2]" />
         {/* Quick add: always reachable on touch, revealed on hover where a pointer exists. */}
-        <Button variant="primary" className="absolute inset-x-3 bottom-3 translate-y-0 opacity-100 transition-[opacity,transform] duration-300 ease-brand md:translate-y-3 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100">
+        <Button variant="primary" onClick={quickAdd} data-cart-add="" className="absolute inset-x-3 bottom-3 z-[2] translate-y-0 opacity-100 transition-[opacity,transform] duration-300 ease-brand md:translate-y-3 md:opacity-0 md:group-hover:translate-y-0 md:group-hover:opacity-100 md:group-focus-within:translate-y-0 md:group-focus-within:opacity-100">
           <Plus className="size-4" aria-hidden /> Quick add
         </Button>
       </div>
       <div className={cn("mt-4 flex items-start justify-between gap-4", premium && "mt-5")}>
         <div className="min-w-0">
-          <h3 className={cn("font-semibold", premium && "font-heading-set text-h4")}>{title}</h3>
+          <h3 className={cn("font-semibold", premium && "font-heading-set text-h4")}>{name}</h3>
           {note && <p className="mt-1 text-small text-muted">{note}</p>}
         </div>
         <Price value={price} className="shrink-0" />
@@ -203,20 +222,45 @@ const stubCard = (i: number, variant: string): RenderNode => ({
 const sampleCards = (count: number, variant: string, offset = 0) =>
   range(count).map((i) => <ProductCard key={i} index={i + offset} node={stubCard(i + offset, variant)} children={null} hasChildren={false} />);
 
+/** Bound cards that pass the live filters and search; unbound children always show. */
+function useVisibleCards(children: ReactNode, hasChildren: boolean) {
+  const collection = useCollection();
+  const rt = useRuntime();
+  const all = Children.toArray(children);
+  const active = !!collection && hasChildren && (rt.filters.length > 0 || rt.query.trim() !== "");
+  const cards = useMemo(() => {
+    if (!active || !collection) return all;
+    const visible = new Set(filterItems(collection.items, rt.filters, rt.query).map((i) => i.id));
+    return all.filter((c) => { const id = boundItem(c); return !id || visible.has(id); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [children, active, collection, rt.filters, rt.query]);
+  return { cards, narrowed: active };
+}
+
+function NoMatches() {
+  return (
+    <p className="col-span-full rounded-card border border-dashed border-border px-6 py-14 text-center text-muted" data-no-matches="">
+      Nothing matches these filters.{" "}
+      <button type="button" onClick={() => { runtime.setFilters([]); runtime.setQuery(""); }} className="font-semibold text-fg underline underline-offset-4">Clear them</button>
+    </p>
+  );
+}
+
 function ProductGrid({ node, children, hasChildren, columns }: NodeProps) {
   const variant = variantOf(node);
   const cardVariant = variant === "dense" ? "standard" : variant === "premium" ? "premium" : "standard";
   const count = variant === "dense" ? 8 : 6;
   const cols = columns ?? (variant === "dense" ? 4 : 3);
+  const { cards, narrowed } = useVisibleCards(children, hasChildren);
   return (
     <Section label={prop(node, "title", "Products")}>
       <SectionHeader eyebrow={prop(node, "eyebrow", "Shop")} title={prop(node, "title", "Best sellers")}
         body={prop(node, "subtitle", "The pieces our customers come back for, again and again.")}
-        action={<Button variant="link" arrow>{prop(node, "cta", "View all")}</Button>} />
+        action={<Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "View all")}</Button>} />
       {/* Columns come from the layout engine at desktop; phones and tablets always get 1 and 2. */}
       <div className={cn("grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-[repeat(var(--cols),minmax(0,1fr))]", variant === "dense" && "gap-y-10")}
         style={{ ["--cols" as string]: cols }}>
-        {hasChildren ? children : sampleCards(count, cardVariant)}
+        {hasChildren ? (narrowed && !cards.length ? <NoMatches /> : cards) : sampleCards(count, cardVariant)}
       </div>
     </Section>
   );
@@ -225,10 +269,12 @@ function ProductGrid({ node, children, hasChildren, columns }: NodeProps) {
 /* ------------------------------------------------------------------ product detail */
 const GALLERY: Subject[] = ["bag", "cup", "leaf", "glass", "product"];
 
-/** The `media` slot lists up to four gallery shots; each position takes its photo or a silhouette. */
-const shotSrc = (node: RenderNode, i: number) => imageAt(node, "media", i)?.url;
+/** The `media` slot lists up to four gallery shots; each position takes its photo or a silhouette.
+ * When the route opened another item than the one the page was written for, its own photo leads. */
+const shotSrc = (node: RenderNode, i: number, other?: ContentItem | null) =>
+  other ? (i === 0 ? other.image_url ?? undefined : undefined) : imageAt(node, "media", i)?.url;
 
-function Gallery({ node, title, main, layout }: { node: RenderNode; title: string; main: Subject; layout: "below" | "side" }) {
+function Gallery({ node, title, main, layout, other }: { node: RenderNode; title: string; main: Subject; layout: "below" | "side"; other?: ContentItem | null }) {
   const shots = [main, ...GALLERY.filter((s) => s !== main)].slice(0, 4) as Subject[];
   const [active, setActive] = useState(0);
   const thumbs = (
@@ -238,14 +284,14 @@ function Gallery({ node, title, main, layout }: { node: RenderNode; title: strin
         <button key={i} type="button" aria-label={`Show image ${i + 1} of ${shots.length}`} aria-pressed={active === i} onClick={() => setActive(i)}
           className={cn("rounded-sm ring-offset-2 ring-offset-bg transition-[opacity,box-shadow] duration-200 ease-brand",
             active === i ? "ring-2 ring-fg" : "opacity-70 hover:opacity-100")}>
-          <Media ratio="1/1" subject={s} src={shotSrc(node, i)} tone={i} zoom={false} label={`${title}, view ${i + 1}`} className="rounded-sm" />
+          <Media ratio="1/1" subject={s} src={shotSrc(node, i, other)} tone={i} zoom={false} label={`${title}, view ${i + 1}`} className="rounded-sm" />
         </button>))}
     </div>
   );
   return (
     <div className={cn("flex flex-col gap-3", layout === "side" && "lg:flex-row lg:gap-4")}>
       <div className="relative min-w-0 flex-1">
-        <Media ratio={layout === "side" ? "4/5" : "1/1"} subject={shots[active]} src={shotSrc(node, active)} tone={active} label={`${title}, image ${active + 1}`} className="shadow-sm" />
+        <Media ratio={layout === "side" ? "4/5" : "1/1"} subject={shots[active]} src={shotSrc(node, active, other)} tone={active} label={`${title}, image ${active + 1}`} className="shadow-sm" />
         <Badge tone="primary" className="absolute left-4 top-4">{active + 1} / {shots.length}</Badge>
       </div>
       {thumbs}
@@ -271,10 +317,15 @@ function DetailOptions({ node }: NodeProps) {
 }
 
 function BuyRow({ node, title, price }: { node: RenderNode; title: string; price: string }) {
+  // M13: adds the shown item to the live cart, then follows the add_to_cart link when there is one.
+  const item = useItem(node);
+  const [qty, setQty] = useState(1);
+  const go = hrefOf(node, "primary_cta");
+  const buy = () => { if (item) runtime.addToCart(item.id, qty); if (go) navigate(go); };
   return (
     <div className="flex items-center gap-2 sm:gap-3">
-      <QuantityStepper id={`${node.id}-qty`} />
-      <Button size="lg" className="min-w-0 flex-1 px-5 sm:px-8">
+      <QuantityStepper id={`${node.id}-qty`} onChange={setQty} />
+      <Button size="lg" onClick={buy} data-role="primary_cta" data-cart-add="" className="min-w-0 flex-1 px-5 sm:px-8">
         {prop(node, "primary_cta", "Add to cart")}
         <span className="hidden items-center gap-2 tabular-nums sm:inline-flex"><span aria-hidden className="opacity-60">·</span>{price}</span>
       </Button>
@@ -296,8 +347,10 @@ function ShippingNote({ node }: { node: RenderNode }) {
 
 const SPECS = ["Origin: Responsibly sourced", "Made: In small batches", "Packaging: Recyclable, gift ready", "Dispatch: Within 2 working days"];
 
-function detailTabs(node: RenderNode) {
-  const specs = listProp(node, "specs", SPECS).map((s) => { const [k, ...v] = s.split(":"); return [k.trim(), v.join(":").trim()]; });
+function detailTabs(node: RenderNode, other?: ContentItem | null) {
+  const specs = other && Object.keys(other.attributes).length
+    ? Object.entries(other.attributes)
+    : listProp(node, "specs", SPECS).map((s) => { const [k, ...v] = s.split(":"); return [k.trim(), v.join(":").trim()]; });
   const tabs = [
     { id: "details", label: prop(node, "details_label", "Details"), content: (
       <div className="space-y-6">
@@ -307,7 +360,7 @@ function detailTabs(node: RenderNode) {
         </dl>
       </div>) },
     { id: "notes", label: prop(node, "notes_label", "Notes"), content: (
-      <ul className="flex flex-wrap gap-2">{listProp(node, "notes", ["Rich", "Rounded", "Quietly complex", "Long finish"]).map((n) => (
+      <ul className="flex flex-wrap gap-2">{(other?.tags.length ? other.tags : listProp(node, "notes", ["Rich", "Rounded", "Quietly complex", "Long finish"])).map((n) => (
         <li key={n}><Badge tone="neutral" className="px-3.5 py-1.5 text-small font-medium">{n}</Badge></li>))}</ul>) },
     { id: "shipping", label: prop(node, "shipping_label", "Shipping & returns"), content: (
       <p className="text-muted text-pretty">{prop(node, "shipping", "Orders placed before 2pm ship the same day. Free delivery on orders over $50, and returns are free within 30 days.")}</p>) },
@@ -317,16 +370,21 @@ function detailTabs(node: RenderNode) {
 
 function ProductDetail({ node }: NodeProps) {
   const variant = variantOf(node);
-  const title = prop(node, "title", "Nº1 Signature");
-  const price = prop(node, "price", "$24.00");
-  const compare = prop(node, "compare_at", "");
-  const main = subjectOf(prop(node, "media", ""), "bag");
+  // The page is written for one item; opened for another (the route's :id), that item's facts
+  // take over the slots the content model owns and the rest of the page stays as designed.
+  const routeItem = useRouteItem();
+  const bound = node.props.binding as { item: string } | undefined;
+  const other = routeItem && routeItem.id !== bound?.item ? routeItem : null;
+  const title = other?.title ?? prop(node, "title", "Nº1 Signature");
+  const price = other?.price ?? prop(node, "price", "$24.00");
+  const compare = other ? "" : prop(node, "compare_at", "");
+  const main = subjectOf(other?.image ?? prop(node, "media", ""), "bag");
   const rating = Number(prop(node, "rating", "4.8")) || 4.8;
   const count = Number(prop(node, "review_count", "218")) || 218;
   const eyebrow = prop(node, "eyebrow", "House collection");
-  const badge = prop(node, "badge", "Bestseller");
-  const description = prop(node, "description", "Our most-loved piece, refined over years. Balanced, generous and quietly memorable — the one customers return for.");
-  const tabs = detailTabs(node);
+  const badge = other ? other.badge ?? "" : prop(node, "badge", "Bestseller");
+  const description = other?.subtitle || prop(node, "description", "Our most-loved piece, refined over years. Balanced, generous and quietly memorable — the one customers return for.");
+  const tabs = detailTabs(node, other);
 
   const header = (center?: boolean) => (
     <div className={cn("space-y-4", center && "flex flex-col items-center text-center")}>
@@ -347,7 +405,7 @@ function ProductDetail({ node }: NodeProps) {
     return (
       <Section label={`Product: ${title}`} wide size="sm">
         <div className="grid gap-10 lg:grid-cols-2 lg:gap-12">
-          <div className="lg:sticky lg:top-8 lg:self-start"><Gallery node={node} title={title} main={main} layout="side" /></div>
+          <div className="lg:sticky lg:top-8 lg:self-start"><Gallery node={node} title={title} main={main} layout="side" other={other} /></div>
           <div className="rounded-lg bg-surface p-6 sm:p-10 lg:p-14">
             <div className="flex flex-col gap-8 lg:sticky lg:top-10">
               {header()}
@@ -377,7 +435,7 @@ function ProductDetail({ node }: NodeProps) {
         {header(true)}
         <Carousel label={`${title} images`} className="mt-12">
           {shots.map((s, i) => (
-            <Media key={i} ratio="4/5" subject={s} src={shotSrc(node, i)} tone={i} label={`${title}, view ${i + 1}`}
+            <Media key={i} ratio="4/5" subject={s} src={shotSrc(node, i, other)} tone={i} label={`${title}, view ${i + 1}`}
               className="w-[80vw] sm:w-[46vw] lg:w-[386px]" />))}
         </Carousel>
         <div className="mt-12 grid gap-10 lg:grid-cols-12 lg:gap-14">
@@ -396,7 +454,7 @@ function ProductDetail({ node }: NodeProps) {
     <Section label={`Product: ${title}`} size="sm">
       {/* Phones read gallery, buy box, details; desktop keeps details under the gallery. */}
       <div className="grid gap-10 lg:grid-cols-12 lg:gap-x-16 lg:gap-y-14">
-        <div className="lg:col-span-7"><Gallery node={node} title={title} main={main} layout="below" /></div>
+        <div className="lg:col-span-7"><Gallery node={node} title={title} main={main} layout="below" other={other} /></div>
         <div className="flex flex-col gap-8 lg:sticky lg:top-8 lg:col-span-5 lg:row-span-2 lg:self-start">
           {header()}
           <div className="border-t border-border pt-8"><DetailOptions node={node} children={null} hasChildren={false} /></div>
@@ -578,24 +636,26 @@ function Reviews({ node }: NodeProps) {
 function RelatedProducts({ node, children, hasChildren, columns }: NodeProps) {
   const variant = variantOf(node, "carousel");
   const title = prop(node, "title", "You may also like");
+  const routeItem = useRouteItem();
+  const related = Children.toArray(children).filter((c) => boundItem(c) !== routeItem?.id);
   const header = (
     <SectionHeader eyebrow={prop(node, "eyebrow", "Pairs well with")} title={title}
       body={prop(node, "subtitle", "")} className="md:mb-10"
-      action={<Button variant="link" arrow>{prop(node, "cta", "Shop all")}</Button>} />
+      action={<Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "Shop all")}</Button>} />
   );
   if (variant === "grid") {
-    const cards = hasChildren ? Children.toArray(children) : sampleCards(4, "premium", 2);
+    const cards = hasChildren ? related : sampleCards(4, "premium", 2);
     return (
       <Section label={title} tone="surface">
         <SectionHeader align="center" eyebrow={prop(node, "eyebrow", "Pairs well with")} title={title}
           body={prop(node, "subtitle", "Chosen to sit beside what you are looking at.")} />
         <div className="grid grid-cols-1 gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-[repeat(var(--cols),minmax(0,1fr))]"
           style={{ ["--cols" as string]: columns ?? 4 }}>{cards.slice(0, (columns ?? 4) * (hasChildren ? 3 : 1))}</div>
-        <div className="mt-12 flex justify-center"><Button variant="secondary" arrow>{prop(node, "cta", "Shop all")}</Button></div>
+        <div className="mt-12 flex justify-center"><Button variant="secondary" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "Shop all")}</Button></div>
       </Section>
     );
   }
-  const cards = hasChildren ? Children.toArray(children) : sampleCards(6, "standard", 2);
+  const cards = hasChildren ? related : sampleCards(6, "standard", 2);
   return (
     <Section label={title} className="overflow-hidden">
       {header}
@@ -607,17 +667,41 @@ function RelatedProducts({ node, children, hasChildren, columns }: NodeProps) {
 }
 
 /* ------------------------------------------------------------------ product filters */
+/** Tags of a collection, most frequent first: the facets a visitor filters by. */
+const facetsOf = (items: ContentItem[]) => {
+  const freq = new Map<string, number>();
+  items.forEach((i) => i.tags.forEach((t) => freq.set(t, (freq.get(t) ?? 0) + 1)));
+  return [...freq.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([t]) => t);
+};
+
+/** On a site the facets come from the collection and the choices live in the runtime state, so
+ * the grid below narrows for real; alone, the written labels and a local estimate stand in. */
 function useFilters(node: RenderNode) {
-  const categories = listProp(node, "categories", ["All", "New arrivals", "Best sellers", "Gift sets", "Limited edition"]);
-  const filters = listProp(node, "filters", ["In stock", "Under $30", "New this month", "Gift ready"]);
+  const collection = useCollection();
+  const rt = useRuntime();
+  const live = !!collection;
+  const facets = useMemo(() => (collection ? facetsOf(collection.items) : []), [collection]);
+  const categories = live ? ["All", ...facets.slice(0, 4)] : listProp(node, "categories", ["All", "New arrivals", "Best sellers", "Gift sets", "Limited edition"]);
+  const filters = live ? facets.slice(4, 12) : listProp(node, "filters", ["In stock", "Under $30", "New this month", "Gift ready"]);
   const sorts = listProp(node, "sort_options", ["Featured", "Newest", "Price: low to high", "Price: high to low", "Top rated"]);
-  const [cat, setCat] = useState(0);
-  const [active, setActive] = useState<string[]>([filters[0]]);
-  const [q, setQ] = useState("");
+  const [cat0, setCat0] = useState(0);
+  const [active0, setActive0] = useState<string[]>(live ? [] : [filters[0]]);
+  const [q0, setQ0] = useState("");
+  const cat = live ? Math.max(0, categories.findIndex((c, i) => i > 0 && rt.filters.includes(c))) : cat0;
+  const active = live ? rt.filters.filter((f) => filters.includes(f)) : active0;
+  const q = live ? rt.query : q0;
+  const setCat = (i: number) => live
+    ? runtime.setFilters([...rt.filters.filter((f) => !categories.includes(f)), ...(i > 0 ? [categories[i]] : [])])
+    : setCat0(i);
+  const setActive = (fs: string[]) => live ? runtime.setFilters(fs.length ? [...rt.filters.filter((f) => categories.includes(f)), ...fs] : []) : setActive0(fs);
+  const toggle = (f: string) => live ? runtime.toggleFilter(f) : setActive0((a) => (a.includes(f) ? a.filter((x) => x !== f) : [...a, f]));
+  const setQ = (v: string) => live ? runtime.setQuery(v) : setQ0(v);
   const total = Number(prop(node, "count", "48")) || 48;
-  const shown = Math.max(1, Math.round(total * (cat === 0 ? 1 : 0.4) * Math.pow(0.7, active.length)) - (q ? 3 : 0));
-  const toggle = (f: string) => setActive((a) => (a.includes(f) ? a.filter((x) => x !== f) : [...a, f]));
-  return { categories, filters, sorts, cat, setCat, active, setActive, toggle, q, setQ, shown };
+  const shown = live
+    ? filterItems(collection.items, rt.filters, rt.query).length
+    : Math.max(1, Math.round(total * (cat === 0 ? 1 : 0.4) * Math.pow(0.7, active.length)) - (q ? 3 : 0));
+  const catCount = (i: number) => live ? (i === 0 ? collection.items.length : collection.items.filter((it) => it.tags.includes(categories[i])).length) : [48, 12, 18, 9, 6][i % 5];
+  return { categories, filters, sorts, cat, setCat, active, setActive, toggle, q, setQ, shown, catCount };
 }
 
 function FilterChips({ f, className, compact }: { f: ReturnType<typeof useFilters>; className?: string; compact?: boolean }) {
@@ -664,7 +748,7 @@ function ProductFilters({ node }: NodeProps) {
             {f.categories.map((c, i) => (
               <button key={c} type="button" aria-pressed={f.cat === i} onClick={() => f.setCat(i)}
                 className={cn(chipCls, "h-12 rounded-pill px-5 text-body", f.cat === i ? chipOn : "bg-surface")}>
-                {c}<span className={cn("text-caption tabular-nums", f.cat === i ? "opacity-80" : "text-muted")}>{[48, 12, 18, 9, 6][i % 5]}</span>
+                {c}<span className={cn("text-caption tabular-nums", f.cat === i ? "opacity-80" : "text-muted")}>{f.catCount(i)}</span>
               </button>))}
           </nav>
         </div>
@@ -725,7 +809,7 @@ const CART = [
   { i: 2, meta: "Large", qty: 2 },
   { i: 3, meta: "Set of 2", qty: 1 },
 ];
-type CartLine = { i: number; title: string; meta: string; qty: number; unit: number; subject: Subject; src?: string };
+type CartLine = { i: number; id?: string; title: string; meta: string; qty: number; unit: number; subject: Subject; src?: string };
 /** Product-card children are the cart's real lines; without them the sample lines stand in. */
 const cartLines = (node?: RenderNode): CartLine[] =>
   node && node.children.length
@@ -735,9 +819,36 @@ const cartLines = (node?: RenderNode): CartLine[] =>
       }))
     : CART.map((c) => ({ ...sample(c.i), ...c, unit: money(sample(c.i).price) }));
 
+/** On a site the cart is what the visitor put in it (M13); alone, the written or sample lines. */
+function useCartLines(node?: RenderNode): { lines: CartLine[]; live: boolean } {
+  const { site } = useSite();
+  const rt = useRuntime();
+  if (!site?.content) return { lines: cartLines(node), live: false };
+  const lines = rt.cart.flatMap((l, i) => {
+    const found = findItem(site, l.item);
+    if (!found) return [];
+    const { item } = found;
+    return [{ i, id: item.id, title: item.title, meta: item.subtitle, qty: l.qty, unit: money(item.price ?? "0"),
+      subject: subjectOf(item.image, "product"), src: item.image_url ?? undefined }];
+  });
+  return { lines, live: true };
+}
+
+function EmptyCart({ node }: { node: RenderNode }) {
+  return (
+    <div className="mt-10 rounded-card border border-dashed border-border px-6 py-16 text-center" data-empty-cart="">
+      <p className="font-heading-set text-h4">Your cart is empty</p>
+      <p className="mt-2 text-muted">Everything you add shows up here.</p>
+      <Button href={hrefOf(node, "continue_cta")} data-role="continue_cta" variant="secondary" arrow className="mt-6">{prop(node, "continue_cta", "Continue shopping")}</Button>
+    </div>
+  );
+}
+
 function CartItems({ node }: NodeProps) {
   const variant = variantOf(node);
-  const lines = cartLines(node);
+  const { lines, live } = useCartLines(node);
+  const remove = (l: CartLine) => { if (live && l.id) runtime.remove(l.id); };
+  const setQty = (l: CartLine) => (qty: number) => { if (live && l.id) runtime.setQty(l.id, qty); };
   const subtotal = lines.reduce((s, l) => s + l.unit * l.qty, 0);
   const threshold = money(prop(node, "free_shipping_threshold", "$120"));
   const left = Math.max(0, threshold - subtotal);
@@ -760,10 +871,19 @@ function CartItems({ node }: NodeProps) {
                   <Price value={`$${(l.unit * l.qty).toFixed(2)}`} className="mt-0.5 text-small sm:hidden" />
                 </div>
                 <Price value={`$${(l.unit * l.qty).toFixed(2)}`} className="hidden text-small sm:flex" />
-                <Button variant="ghost" size="icon" aria-label={`Remove ${l.title}`}><X className="size-4" /></Button>
+                <Button variant="ghost" size="icon" aria-label={`Remove ${l.title}`} onClick={() => remove(l)}><X className="size-4" /></Button>
               </li>))}
           </ul>
+          {live && !lines.length && <p className="py-6 text-center text-muted" data-empty-cart="">Your bag is empty.</p>}
         </div>
+      </Section>
+    );
+  }
+  if (live && !lines.length) {
+    return (
+      <Section label="Cart items" size="sm">
+        <h1 className="font-heading-set text-h1">{prop(node, "title", "Your cart")}</h1>
+        <EmptyCart node={node} />
       </Section>
     );
   }
@@ -771,7 +891,7 @@ function CartItems({ node }: NodeProps) {
     <Section label="Cart items" size="sm">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="font-heading-set text-h1">{prop(node, "title", "Your cart")}</h1>
-        <p className="text-muted">{lines.reduce((s, l) => s + l.qty, 0)} items</p>
+        <p className="text-muted" data-cart-total-qty="">{lines.reduce((s, l) => s + l.qty, 0)} items</p>
       </div>
       <div className="mt-8 rounded-card border border-border bg-surface p-5">
         <p className="flex items-center gap-2 text-small font-medium">
@@ -794,20 +914,20 @@ function CartItems({ node }: NodeProps) {
               {l.meta && <p className="text-small text-muted">{l.meta}</p>}
               <p className="text-small tabular-nums text-muted">${l.unit.toFixed(2)} each</p>
               <div className="flex gap-4 pt-1">
-                <button type="button" className="inline-flex min-h-11 items-center gap-1.5 text-small font-medium text-muted transition-colors hover:text-fg">
+                <button type="button" onClick={() => remove(l)} className="inline-flex min-h-11 items-center gap-1.5 text-small font-medium text-muted transition-colors hover:text-fg">
                   <Trash2 aria-hidden className="size-4" /> Remove</button>
                 <button type="button" className="inline-flex min-h-11 items-center gap-1.5 text-small font-medium text-muted transition-colors hover:text-fg">
                   <Heart aria-hidden className="size-4" /> Save for later</button>
               </div>
             </div>
             <div className="col-start-2 mt-2 flex items-center justify-between gap-4 md:col-start-auto md:mt-0 md:contents">
-              <QuantityStepper id={`${node.id}-qty-${l.i}`} initial={l.qty} label={`Quantity of ${l.title}`} />
+              <QuantityStepper id={`${node.id}-qty-${l.i}`} initial={l.qty} label={`Quantity of ${l.title}`} onChange={setQty(l)} />
               <Price value={`$${(l.unit * l.qty).toFixed(2)}`} className="justify-end text-lead" />
             </div>
           </li>))}
       </ul>
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
-        <Button variant="link" className="gap-1.5"><ArrowRight aria-hidden className="size-4 rotate-180" /> {prop(node, "continue_cta", "Continue shopping")}</Button>
+        <Button variant="link" href={hrefOf(node, "continue_cta")} data-role="continue_cta" className="gap-1.5"><ArrowRight aria-hidden className="size-4 rotate-180" /> {prop(node, "continue_cta", "Continue shopping")}</Button>
         <p className="text-small text-muted">{prop(node, "note", "Prices include taxes. Delivery is calculated at checkout.")}</p>
       </div>
     </Section>
@@ -816,15 +936,25 @@ function CartItems({ node }: NodeProps) {
 
 function OrderSummary({ node }: NodeProps) {
   const variant = variantOf(node);
-  const lines = cartLines();
+  const { lines, live } = useCartLines();
   const title = prop(node, "title", "Order summary");
-  const rows: [string, string][] = [
-    [prop(node, "subtotal_label", "Subtotal"), prop(node, "subtotal", "$104.00")],
-    [prop(node, "shipping_label", "Delivery"), prop(node, "shipping", "Free")],
-    [prop(node, "discount_label", "Discount · WELCOME10"), prop(node, "discount", "−$10.40")],
-    [prop(node, "tax_label", "Estimated tax"), prop(node, "tax", "$7.49")],
-  ];
-  const total = prop(node, "total", "$101.09");
+  // Live: computed from the cart (free delivery from $50, 8% tax); alone: the written figures.
+  const subtotal = lines.reduce((s, l) => s + l.unit * l.qty, 0);
+  const delivery = subtotal >= 50 || subtotal === 0 ? 0 : 6;
+  const tax = Math.round(subtotal * 8) / 100;
+  const rows: [string, string][] = live
+    ? [
+        [prop(node, "subtotal_label", "Subtotal"), fmt(subtotal, "$")],
+        [prop(node, "shipping_label", "Delivery"), delivery ? fmt(delivery, "$") : "Free"],
+        [prop(node, "tax_label", "Estimated tax"), fmt(tax, "$")],
+      ]
+    : [
+        [prop(node, "subtotal_label", "Subtotal"), prop(node, "subtotal", "$104.00")],
+        [prop(node, "shipping_label", "Delivery"), prop(node, "shipping", "Free")],
+        [prop(node, "discount_label", "Discount · WELCOME10"), prop(node, "discount", "−$10.40")],
+        [prop(node, "tax_label", "Estimated tax"), prop(node, "tax", "$7.49")],
+      ];
+  const total = live ? fmt(subtotal + delivery + tax, "$") : prop(node, "total", "$101.09");
   const totals = (
     <>
       <dl className="space-y-3 text-small">
@@ -832,7 +962,7 @@ function OrderSummary({ node }: NodeProps) {
       </dl>
       <div className="mt-5 flex items-baseline justify-between gap-4 border-t border-border pt-5">
         <span className="font-semibold">{prop(node, "total_label", "Total")}</span>
-        <span className="flex items-baseline gap-2"><span className="text-caption text-muted">{prop(node, "currency", "USD")}</span><span className="font-heading-set text-h3 tabular-nums">{total}</span></span>
+        <span className="flex items-baseline gap-2"><span className="text-caption text-muted">{prop(node, "currency", "USD")}</span><span className="font-heading-set text-h3 tabular-nums" data-cart-total="">{total}</span></span>
       </div>
     </>
   );
@@ -890,7 +1020,7 @@ function OrderSummary({ node }: NodeProps) {
             </div>
             <Button variant="secondary" type="submit">Apply</Button>
           </form>
-          <Button size="lg" arrow className="mt-6 w-full">{prop(node, "primary_cta", "Checkout")}</Button>
+          <Button size="lg" arrow href={hrefOf(node, "primary_cta")} data-role="primary_cta" className="mt-6 w-full">{prop(node, "primary_cta", "Checkout")}</Button>
           <p className="mt-4 flex items-center justify-center gap-2 text-caption text-muted"><Lock aria-hidden className="size-3.5" /> {prop(node, "note", "Secure checkout · All major cards accepted")}</p>
         </aside>
       </div>
@@ -902,13 +1032,13 @@ function OrderSummary({ node }: NodeProps) {
 const COLLECTIONS = ["The Signature Edit", "Seasonal Rituals", "Cold & Bright", "Gifts & Sets", "Everyday Essentials"];
 const COLLECTION_SUBJECTS: Subject[] = ["bag", "leaf", "glass", "product", "cup"];
 
-function CollectionTile({ name, count, desc, subject, src, tone, ratio, className, mediaClass, cta, below }: {
+function CollectionTile({ name, count, desc, subject, src, tone, ratio, className, mediaClass, cta, below, href }: {
   name: string; count: string; desc: string; subject: Subject; src?: string; tone: number; ratio: string; className?: string; mediaClass?: string; cta: string;
-  below?: boolean;
+  below?: boolean; href?: string;
 }) {
   if (below) {
     return (
-      <a href="#" className={cn("group block", className)}>
+      <a href={href ?? "#"} data-role="tile_cta" className={cn("group block", className)}>
         <div className="relative">
           <Media ratio={ratio} subject={subject} src={src} tone={tone} label={name} className="transition-shadow duration-500 ease-brand group-hover:shadow-xl" />
           <span className="absolute left-4 top-4 rounded-pill bg-bg/95 px-3 py-1 text-caption font-semibold shadow-sm">{count}</span>
@@ -922,7 +1052,7 @@ function CollectionTile({ name, count, desc, subject, src, tone, ratio, classNam
     );
   }
   return (
-    <a href="#" className={cn("group relative block overflow-hidden rounded-media", className)}>
+    <a href={href ?? "#"} data-role="tile_cta" className={cn("group relative block overflow-hidden rounded-media", className)}>
       <Media ratio={ratio} subject={subject} src={src} tone={tone} label={name} className={cn("transition-shadow duration-500 ease-brand group-hover:shadow-xl", mediaClass)} />
       <div className="absolute inset-x-3 bottom-3 rounded-card bg-bg/95 p-5 shadow-md backdrop-blur transition-transform duration-500 ease-brand md:group-hover:-translate-y-1">
         <div className="flex items-center justify-between gap-4">
@@ -955,12 +1085,12 @@ function CollectionGrid({ node, columns }: NodeProps) {
   const cta = prop(node, "tile_cta", "Shop the collection");
   const title = prop(node, "title", "Shop by collection");
   const tile = (i: number, ratio: string, className?: string, mediaClass?: string, below?: boolean) => (
-    <CollectionTile key={i} below={below} name={names[i]} count={at(counts, i, "")} desc={at(descs, i, "")} cta={cta} tone={i}
+    <CollectionTile key={i} below={below} name={names[i]} count={at(counts, i, "")} desc={at(descs, i, "")} cta={cta} tone={i} href={hrefOf(node, "tile_cta")}
       subject={subjectOf(at(media, i, "bag"), COLLECTION_SUBJECTS[i % 5])} src={imageAt(node, "media", i)?.url} ratio={ratio} className={className} mediaClass={mediaClass} />);
   const header = (
     <SectionHeader eyebrow={prop(node, "eyebrow", "Collections")} title={title}
       body={prop(node, "subtitle", "Find your way in — each collection is curated around a moment in the day.")}
-      action={<Button variant="link" arrow>{prop(node, "cta", "All collections")}</Button>} />
+      action={<Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "All collections")}</Button>} />
   );
 
   if (variant === "asymmetric") {
@@ -1021,7 +1151,7 @@ function PromoBanner({ node }: NodeProps) {
           <p className="flex items-center gap-2 text-small font-semibold"><Sparkles aria-hidden className="size-4 shrink-0" />{offer} {offerNote}</p>
           <span aria-hidden className="hidden opacity-50 sm:inline">·</span>
           {timer}
-          <a href="#" className="inline-flex min-h-11 items-center gap-1 text-small font-semibold underline underline-offset-4 hover:no-underline">{cta}<ArrowRight aria-hidden className="size-3.5" /></a>
+          <a href={hrefOf(node, "cta") ?? "#"} data-role="cta" className="inline-flex min-h-11 items-center gap-1 text-small font-semibold underline underline-offset-4 hover:no-underline">{cta}<ArrowRight aria-hidden className="size-3.5" /></a>
         </div>
       </Section>
     );
@@ -1033,7 +1163,7 @@ function PromoBanner({ node }: NodeProps) {
       <p className="flex flex-wrap items-baseline gap-x-3"><span className="font-heading-set text-display leading-none">{offer}</span><span className="text-lead text-muted">{offerNote}</span></p>
       <p className="max-w-md text-muted text-pretty">{prop(node, "body", "Fresh arrivals, gift-ready sets and a few rare finds — only while the season lasts.")}</p>
       <div className="flex flex-wrap items-center gap-3">{codePill}{timer}</div>
-      <Button size="lg" arrow className="mt-2">{cta}</Button>
+      <Button size="lg" arrow href={hrefOf(node, "cta")} data-role="cta" className="mt-2">{cta}</Button>
     </div>
   );
   if (variant === "overlay") {
@@ -1184,13 +1314,26 @@ function ProductCustomizer({ node }: NodeProps) {
 function SearchBar({ node }: NodeProps) {
   const variant = variantOf(node);
   const [q, setQ] = useState("");
-  const suggestions = listProp(node, "suggestions", ["Signature blend", "Gift sets", "Seasonal edit", "Best sellers", "New arrivals", "Under $30"]);
+  const collection = useCollection();
+  const itemHref = useItemHref();
+  const allResults = hrefOf(node, "all_results_cta");
+  // On a site the suggestions are real titles, the results real items, and submitting carries
+  // the query to the listing through the runtime state.
+  const suggestions = collection
+    ? collection.items.map((i) => i.title).slice(0, 6)
+    : listProp(node, "suggestions", ["Signature blend", "Gift sets", "Seasonal edit", "Best sellers", "New arrivals", "Under $30"]);
   const [recent, setRecent] = useState(() => listProp(node, "recent", ["Morning Ritual", "Gift card", "Cold Studio"]));
   const placeholder = prop(node, "placeholder", "Search products, collections and gifts");
   const title = prop(node, "title", "What are you looking for?");
   const id = `${node.id}-q`;
   const matches = useMemo(() => (q ? suggestions.filter((s) => s.toLowerCase().includes(q.toLowerCase())) : suggestions), [q, suggestions]);
-  const submit = (e: FormEvent) => e.preventDefault();
+  const results = collection
+    ? filterItems(collection.items, [], q).slice(0, 3).map((it, i) => ({ id: it.id, title: it.title, note: it.subtitle, price: it.price ?? "", subject: subjectOf(it.image, "product"), src: it.image_url ?? undefined, i }))
+    : range(3).map((i) => ({ id: undefined, ...sample(i + 1), src: undefined, i }));
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (collection) { runtime.setQuery(q); if (allResults) navigate(allResults); }
+  };
 
   if (variant === "inline") {
     return (
@@ -1232,13 +1375,13 @@ function SearchBar({ node }: NodeProps) {
             <div className="p-5">
               <p className="px-3 pb-2 text-caption font-semibold uppercase tracking-[0.14em] text-muted">{prop(node, "products_label", "Products")}</p>
               <ul>
-                {range(3).map((i) => { const s = sample(i + 1); return (
-                  <li key={i}><a href="#" className="flex items-center gap-4 rounded-button p-3 transition-colors hover:bg-fg/[0.05]">
-                    <Media ratio="1/1" subject={s.subject} tone={i} label={s.title} zoom={false} className="w-14 shrink-0 rounded-sm" />
+                {results.map((s) => (
+                  <li key={s.i}><a href={(s.id && itemHref(s.id)) ?? "#"} data-role="result" className="flex items-center gap-4 rounded-button p-3 transition-colors hover:bg-fg/[0.05]">
+                    <Media ratio="1/1" subject={s.subject} src={s.src} tone={s.i} label={s.title} zoom={false} className="w-14 shrink-0 rounded-sm" />
                     <span className="min-w-0 flex-1"><span className="block truncate font-semibold">{s.title}</span><span className="block truncate text-small text-muted">{s.note}</span></span>
-                    <span className="font-semibold tabular-nums">{s.price}</span></a></li>); })}
+                    <span className="font-semibold tabular-nums">{s.price}</span></a></li>))}
               </ul>
-              <a href="#" className="mt-2 flex min-h-11 items-center justify-center gap-2 rounded-button bg-surface text-small font-semibold transition-colors hover:bg-surface-alt">
+              <a href={allResults ?? "#"} data-role="all_results_cta" onClick={() => { if (collection) runtime.setQuery(q); }} className="mt-2 flex min-h-11 items-center justify-center gap-2 rounded-button bg-surface text-small font-semibold transition-colors hover:bg-surface-alt">
                 {prop(node, "all_results_cta", "See all results")}<ArrowRight aria-hidden className="size-4" /></a>
             </div>
           </div>
@@ -1281,11 +1424,14 @@ function CategoryHero({ node }: NodeProps) {
   const subject = subjectOf(prop(node, "media", ""), "bag");
   const src = imageAt(node, "media")?.url;
   const label = prop(node, "media_label", `${title} collection`);
-  const crumbs = listProp(node, "breadcrumb", ["Home", "Shop"]);
+  const trail = node.props.trail_links as { label: string; href: string }[] | undefined;
+  const crumbs = trail?.length
+    ? trail.slice(0, -1).map((t) => ({ label: t.label, href: t.href }))
+    : listProp(node, "breadcrumb", ["Home", "Shop"]).map((label) => ({ label, href: "#" }));
   const breadcrumb = (
     <nav aria-label="Breadcrumb">
       <ol className="flex flex-wrap items-center gap-2 text-small text-muted">
-        {crumbs.map((c) => <li key={c} className="flex items-center gap-2"><a href="#" className="inline-flex min-h-6 items-center hover:text-fg">{c}</a><span aria-hidden>/</span></li>)}
+        {crumbs.map((c) => <li key={c.label} className="flex items-center gap-2"><a href={c.href} className="inline-flex min-h-6 items-center hover:text-fg">{c.label}</a><span aria-hidden>/</span></li>)}
         <li aria-current="page" className="font-medium text-fg">{title}</li>
       </ol>
     </nav>
@@ -1371,8 +1517,8 @@ function ProductSpotlight({ node }: NodeProps) {
   const story = prop(node, "story", "Ten years in the making and still our most-requested piece. We refine it every season, but never change what makes it ours.");
   const ctas = (withPrice = true) => (
     <div className="flex flex-wrap items-center gap-3">
-      <Button size="lg" arrow>{prop(node, "primary_cta", "Shop now")}{withPrice && ` · ${price}`}</Button>
-      <Button size="lg" variant="secondary">{prop(node, "secondary_cta", "Read the story")}</Button>
+      <Button size="lg" arrow href={hrefOf(node, "primary_cta")} data-role="primary_cta">{prop(node, "primary_cta", "Shop now")}{withPrice && ` · ${price}`}</Button>
+      <Button size="lg" variant="secondary" href={hrefOf(node, "secondary_cta")} data-role="secondary_cta">{prop(node, "secondary_cta", "Read the story")}</Button>
     </div>
   );
   const eyebrow = <Eyebrow>{prop(node, "eyebrow", "In the spotlight")}</Eyebrow>;
@@ -1500,7 +1646,7 @@ function SubscriptionOffer({ node }: NodeProps) {
       {perks.map((p) => <li key={p} className="flex items-center gap-3"><span className="grid size-6 shrink-0 place-items-center rounded-pill bg-primary text-primary-fg"><Check aria-hidden className="size-3.5" /></span>{p}</li>)}
     </ul>
   );
-  const cta = <Button size="lg" arrow className="w-full sm:w-auto">{plan === "subscribe" ? prop(node, "primary_cta", "Start my subscription") : prop(node, "secondary_cta", "Add to cart")}</Button>;
+  const cta = <Button size="lg" arrow href={hrefOf(node, plan === "subscribe" ? "primary_cta" : "secondary_cta")} data-role={plan === "subscribe" ? "primary_cta" : "secondary_cta"} className="w-full sm:w-auto">{plan === "subscribe" ? prop(node, "primary_cta", "Start my subscription") : prop(node, "secondary_cta", "Add to cart")}</Button>;
 
   if (variant === "split") {
     return (
@@ -1577,7 +1723,7 @@ function Lookbook({ node }: NodeProps) {
   const header = (
     <SectionHeader eyebrow={prop(node, "eyebrow", "Lookbook")} title={title}
       body={prop(node, "subtitle", "Pieces from the collection, shown the way we live with them.")}
-      action={<Button variant="link" arrow>{prop(node, "cta", "Shop the lookbook")}</Button>} />
+      action={<Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "Shop the lookbook")}</Button>} />
   );
 
   if (variant === "captions") {
@@ -1629,7 +1775,7 @@ function Lookbook({ node }: NodeProps) {
                   <span className="font-medium">{product(k).title}</span><span className="tabular-nums text-muted">{product(k).price}</span>
                 </li>))}
             </ul>
-            <Button variant="primary" arrow className="self-start">{prop(node, "look_cta", "Shop this look")}</Button>
+            <Button variant="primary" arrow href={hrefOf(node, "look_cta")} data-role="look_cta" className="self-start">{prop(node, "look_cta", "Shop this look")}</Button>
           </div>
         </div>
       </div>

@@ -23,6 +23,7 @@ def _numbered(name: str, count: int, description: str) -> list[S]:
 COMPONENTS: list[ComponentDefinition] = [
     ComponentDefinition(
         id="faq",
+        emits={"contact_cta": ["contact"]},
         category=C.content,
         description=(
             "Accordion of frequently asked questions; two_column adds a heading, intro and "
@@ -57,6 +58,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="brand_story",
+        emits={"cta": ["learn_more", "browse"]},
         category=C.content,
         description=(
             "Asymmetric image with long-form brand story, pull quote and founder signature"
@@ -196,6 +198,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="article_grid",
+        emits={"cta": ["browse", "learn_more"]},
         category=C.content,
         description=(
             "Journal cards: a featured article with smaller ones, category tags and read time"
@@ -230,6 +233,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="image_band",
+        emits={"cta": ["browse", "learn_more"]},
         category=C.content,
         description="Full-bleed image band with a caption on a solid panel",
         capabilities=["media", "atmosphere", "story", "break"],
@@ -381,6 +385,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="feature_split",
+        emits={"cta": ["browse", "sign_up", "learn_more"]},
         category=C.content,
         description=("Large media (sticky on desktop) beside a list of 3-4 benefits with icons"),
         capabilities=["features", "benefits", "media", "value_proposition"],

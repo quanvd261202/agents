@@ -53,6 +53,8 @@ def run(
     if state.get("screens"):
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+        if (site := state.get("site_model")) is not None:
+            (run_dir / "site.json").write_text(site.model_dump_json())
         typer.echo("\n" + format_summary(summary))
         typer.echo(f"\nwrote {run_dir}/")
     if not summary["accepted"]:
@@ -97,12 +99,17 @@ def view(
         if not runs:
             raise typer.BadParameter("no runs yet; `uib run` one first")
         run_dir = runs[-1]
+    models = Path(tempfile.mkdtemp(prefix="uib-view-"))
+    # A run with a site.json is served as the site: real routes, the visitor's cart, the flow.
+    site_json = run_dir / "site.json"
+    if site_json.exists():
+        _serve_site(site_json, models, port)
+        return
     specs = sorted(run_dir.glob("*.spec.json"))
     prebuilt = sorted(run_dir.glob("*.model.json"))  # `uib gallery` output
     if not specs and not prebuilt:
-        raise typer.BadParameter(f"no *.spec.json or *.model.json in {run_dir}")
+        raise typer.BadParameter(f"no site.json, *.spec.json or *.model.json in {run_dir}")
 
-    models = Path(tempfile.mkdtemp(prefix="uib-view-"))
     resolver = default_design_resolver()
     links = []
     for path in specs:
@@ -135,6 +142,45 @@ def view(
     httpd = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(FRONTEND_DIST)))
     url = f"http://127.0.0.1:{port}/models/index.html"
     typer.echo(f"serving {run_dir} at {url} (Ctrl-C to stop)")
+    webbrowser.open(url)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+
+
+def _serve_site(site_json: Path, tmp: Path, port: int) -> None:
+    """Serve the bundle with the site injected as window.__uibSite and every extensionless path
+    falling back to index.html, so /products/house-blend is the app, not a 404."""
+    import webbrowser
+    from functools import partial
+    from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+    from app.renderer.server import FRONTEND_DIST
+
+    index = (FRONTEND_DIST / "index.html").read_text(encoding="utf-8")
+    (tmp / "site.js").write_text(
+        "window.__uibSite = " + site_json.read_text(encoding="utf-8") + ";", encoding="utf-8"
+    )
+    (tmp / "index.html").write_text(
+        index.replace("</head>", '<script src="/site.js"></script></head>', 1), encoding="utf-8"
+    )
+
+    class Handler(SimpleHTTPRequestHandler):
+        def translate_path(self, path: str) -> str:
+            clean = path.split("?")[0]
+            if clean in ("/site.js", "/index.html") or "." not in clean.rsplit("/", 1)[-1]:
+                return str(tmp / ("site.js" if clean == "/site.js" else "index.html"))
+            return super().translate_path(path)
+
+        def log_message(self, *args: object) -> None:
+            return
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), partial(Handler, directory=str(FRONTEND_DIST)))
+    url = f"http://127.0.0.1:{port}/"
+    typer.echo(f"serving {site_json.parent} as a site at {url} (Ctrl-C to stop)")
     webbrowser.open(url)
     try:
         httpd.serve_forever()

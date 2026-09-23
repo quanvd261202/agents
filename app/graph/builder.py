@@ -9,6 +9,7 @@ from app.core.exceptions import UIBuilderError
 from app.core.logging import get_logger
 from app.graph.nodes import make_run_nodes, make_screen_nodes
 from app.graph.state import AgentState, ScreenState
+from app.models import SiteMap
 from app.services.container import Services
 
 log = get_logger(__name__)
@@ -25,6 +26,7 @@ def fan_out_screens(state: AgentState) -> list[Send]:
     req, plan = state.get("clarified_requirements"), state.get("ux_plan")
     direction = state.get("design_direction")
     assert req is not None and plan is not None and direction is not None
+    site = SiteMap.from_plan(plan)
     return [
         Send(
             "screen",
@@ -33,6 +35,8 @@ def fan_out_screens(state: AgentState) -> list[Send]:
                 user_requirement=state.get("user_requirement", ""),
                 clarified_requirements=req,
                 design_direction=direction,
+                content_model=state.get("content_model"),
+                site_map=site,
                 screen=screen,
                 iteration=0,
             ),
@@ -98,8 +102,11 @@ def build_graph(svc: Services, checkpointer: Any | None = None) -> Any:
     g.add_edge(START, "clarifier")
     g.add_conditional_edges("clarifier", route_after_clarifier)
     g.add_edge("planner", "design_director")
-    g.add_conditional_edges("design_director", fan_out_screens, ["screen"])
-    g.add_edge("screen", END)
+    g.add_edge("design_director", "content_model")
+    g.add_conditional_edges("content_model", fan_out_screens, ["screen"])
+    # Every screen branch feeds the one fan-in, which runs once they have all finished.
+    g.add_edge("screen", "assemble")
+    g.add_edge("assemble", END)
     return g.compile(checkpointer=checkpointer).with_config(
         max_concurrency=svc.settings.max_parallel_screens
     )

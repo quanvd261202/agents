@@ -4,7 +4,7 @@ import {
   ArrowUpRight, Award, Check, ChevronDown, Clock, Gift, Hand, Heart, Leaf, Mail, MapPin, MessageCircle, Navigation, Phone,
   Quote, Recycle, ShieldCheck, Sparkles, Truck,
 } from "lucide-react";
-import { Avatar, Button, Disclosure, Eyebrow, Field, Media, Section, SectionHeader, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject } from "../ui";
+import { Avatar, Button, Disclosure, Eyebrow, Field, Media, Section, SectionHeader, imageAt, listProp, hrefOf, prop, range, subjectOf, variantOf, type Subject } from "../ui";
 import { cn } from "../lib/cn";
 import type { RenderNode } from "../types";
 import type { NodeProps, SectionMap } from "./types";
@@ -149,7 +149,7 @@ function BrandStory({ node }: NodeProps) {
             <p className="max-w-[60ch] text-muted text-pretty lg:col-span-5 lg:col-start-2">{body2}</p>
             <div className="flex flex-wrap items-center justify-between gap-6 lg:col-span-5 lg:col-start-8 lg:self-start">
               <Signature name={name} role={role} />
-              <Button variant="link" arrow className="px-0">{cta}</Button>
+              <Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta" className="px-0">{cta}</Button>
             </div>
           </div>
         </div>
@@ -171,7 +171,7 @@ function BrandStory({ node }: NodeProps) {
             <PullQuote text={quote} />
             <div className="flex flex-wrap items-center justify-between gap-6">
               <Signature name={name} role={role} />
-              <Button variant="secondary" arrow>{cta}</Button>
+              <Button variant="secondary" arrow href={hrefOf(node, "cta")} data-role="cta">{cta}</Button>
             </div>
           </div>
         </div>
@@ -197,7 +197,7 @@ function BrandStory({ node }: NodeProps) {
           <PullQuote text={quote} className="max-w-xl py-2" />
           <div className="flex flex-wrap items-center gap-x-10 gap-y-6 pt-2">
             <Signature name={name} role={role} />
-            <Button variant="link" arrow className="px-0">{cta}</Button>
+            <Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta" className="px-0">{cta}</Button>
           </div>
         </div>
       </div>
@@ -454,7 +454,7 @@ function ArticleGrid({ node }: NodeProps) {
   const header = (
     <SectionHeader eyebrow={prop(node, "eyebrow", "Journal")} title={title}
       body={prop(node, "intro", "Stories, guides and small discoveries from the people behind the counter.")}
-      action={<Button variant="secondary" arrow>{prop(node, "cta", "All stories")}</Button>} />
+      action={<Button variant="secondary" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "All stories")}</Button>} />
   );
 
   if (variant === "list") {
@@ -545,7 +545,7 @@ function ImageBand({ node }: NodeProps) {
             <h2 className="font-heading-set text-h3 text-balance md:col-span-5">{title}</h2>
             <div className="space-y-4 md:col-span-4">
               <p className="text-small text-muted text-pretty">{caption}</p>
-              <Button variant="link" arrow className="px-0">{cta}</Button>
+              <Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta" className="px-0">{cta}</Button>
             </div>
           </figcaption>
         </figure>
@@ -565,7 +565,7 @@ function ImageBand({ node }: NodeProps) {
               <Eyebrow>{eyebrow}</Eyebrow>
               <h2 className="font-heading-set text-h3 text-balance">{title}</h2>
               <p className="text-small text-muted text-pretty">{caption}</p>
-              <Button arrow className="mt-2">{cta}</Button>
+              <Button arrow href={hrefOf(node, "cta")} data-role="cta" className="mt-2">{cta}</Button>
             </div>
           </div>
         </div>
@@ -973,7 +973,7 @@ function FeatureSplit({ node }: NodeProps) {
       <Section label={title} tone="alt" wide>
         <div className="grid gap-8 lg:grid-cols-12 lg:items-end">
           <div className="lg:col-span-6">{header}</div>
-          <div className="lg:col-span-4 lg:col-start-9 lg:pb-2"><Button variant="secondary" arrow>{prop(node, "cta", "See how we work")}</Button></div>
+          <div className="lg:col-span-4 lg:col-start-9 lg:pb-2"><Button variant="secondary" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "See how we work")}</Button></div>
         </div>
         <Media ratio="21/9" subject={subject} src={src} label={label} className="mt-12 min-h-64 md:mt-16" />
         <ul className="mt-12 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-4">{titles.map(item)}</ul>
@@ -993,7 +993,7 @@ function FeatureSplit({ node }: NodeProps) {
         <div className={cn("space-y-12 lg:col-span-5 lg:py-8", right ? "lg:order-1 lg:col-start-1" : "lg:col-start-8")}>
           {header}
           <ul className="space-y-7">{titles.map(item)}</ul>
-          <Button arrow>{prop(node, "cta", "See how we work")}</Button>
+          <Button arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "See how we work")}</Button>
         </div>
       </div>
     </Section>

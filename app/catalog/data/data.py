@@ -222,6 +222,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="empty_state",
+        emits={"primary_cta": ["browse", "go_home"]},
         category=C.feedback,
         description=(
             "Empty state with illustration, title, body and primary action. standard is a "

@@ -82,6 +82,7 @@ async def test_every_stage_is_persisted_in_order_and_costed(stub):
         "clarifier",
         "planner",
         "design_director",
+        "content_model",
         "home/retrieval",
         "home/design_builder",
         "home/copywriter",
@@ -90,9 +91,10 @@ async def test_every_stage_is_persisted_in_order_and_costed(stub):
         "home/renderer",
         "home/verifier",
         "home/finalize",
+        "assemble",
     ]
     run_nodes = [r["node"] for r in state["usage"] if r["kind"] == "node"]
-    assert run_nodes == ["clarifier", "planner", "design_director"]
+    assert run_nodes == ["clarifier", "planner", "design_director", "content_model", "assemble"]
     [screen] = state["screens"]
     screen_nodes = [r["node"] for r in screen["usage"] if r["kind"] == "node"]
     assert screen_nodes[0] == "home/retrieval" and screen_nodes[-1] == "home/finalize"
@@ -101,7 +103,7 @@ async def test_every_stage_is_persisted_in_order_and_costed(stub):
 
 async def test_persisted_stages_hold_the_outputs_without_screenshots():
     class Shots(StubServices):
-        async def render(self, model):
+        async def render(self, model, context=None):
             self.calls.append("render")
             return RenderResult(
                 html="<div/>", screenshots={Breakpoint.mobile: "AAAA"}, render_time_ms=12.0

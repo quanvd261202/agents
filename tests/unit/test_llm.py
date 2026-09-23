@@ -6,9 +6,7 @@ from app.models import UXPlan
 
 
 async def test_fake_provider_returns_queued_model():
-    plan = UXPlan(
-        product="p", user_goals=["g"], journey=["j"], screens=[{"id": "h", "purpose": "x"}]
-    )
+    plan = UXPlan(product="p", user_goals=["g"], screens=[{"id": "h", "purpose": "x"}])
     llm = FakeLLMProvider([plan])
     out = await llm.invoke_structured([Message("user", "hi")], UXPlan)
     assert out.value == plan
@@ -17,7 +15,7 @@ async def test_fake_provider_returns_queued_model():
 
 async def test_fake_provider_parses_json_string():
     llm = FakeLLMProvider(
-        ['{"product":"p","user_goals":["g"],"journey":["j"],"screens":[{"id":"h","purpose":"x"}]}']
+        ['{"product":"p","user_goals":["g"],"screens":[{"id":"h","purpose":"x"}]}']
     )
     out = await llm.invoke_structured([], UXPlan)
     assert out.value.product == "p"

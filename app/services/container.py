@@ -6,11 +6,14 @@ from app.core.config import Settings
 from app.core.llm import LLMProvider
 from app.services.interfaces import (
     ClarifierService,
+    ContentModelService,
     CopywriterService,
     DesignBuilderService,
     DesignDirectorService,
     DesignResolverService,
     FixerService,
+    FlowCheckService,
+    FlowFixerService,
     ImageryService,
     LearningService,
     PlannerService,
@@ -29,6 +32,7 @@ class Services:
     clarifier: ClarifierService
     planner: PlannerService
     director: DesignDirectorService
+    content: ContentModelService
     retrieval: RetrievalService
     builder: DesignBuilderService
     copywriter: CopywriterService
@@ -38,3 +42,5 @@ class Services:
     verifier: VerifierService
     fixer: FixerService
     learning: LearningService
+    flow: FlowCheckService
+    flow_fixer: FlowFixerService

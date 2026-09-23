@@ -7,6 +7,7 @@ from app.animation.registry import AnimationRegistry
 from app.core.exceptions import ValidationError
 from app.core.llm import LLMProvider
 from app.dsl.resolver import PAGE_ANIMATION_ALIASES
+from app.flow import IntentRegistry, default_intent_registry, validate_intent_targets
 from app.models.direction import DesignDirection
 from app.models.plan import UXPlan
 from app.models.requirements import ClarifiedRequirements
@@ -70,12 +71,14 @@ class DirectorAgent(Agent):
         recipes: RecipeRegistry,
         animations: AnimationRegistry,
         palettes: PaletteRegistry | None = None,
+        intents: IntentRegistry | None = None,
     ) -> None:
         super().__init__(llm)
         self._themes = themes
         self._recipes = recipes
         self._animations = animations
         self._palettes = palettes or default_palette_registry()
+        self._intents = intents or default_intent_registry()
 
     def _typography(self) -> dict[str, dict[str, str]]:
         return self._themes.get("base").typography_presets
@@ -98,7 +101,8 @@ class DirectorAgent(Agent):
                 domain=req.domain,
                 audience=req.target_audience,
                 goal=req.primary_goal,
-                journey=" -> ".join(plan.journey),
+                journey=" -> ".join(f"{step.screen} ({step.intent})" for step in plan.journey)
+                + (f" -> {plan.journey[-1].to}" if plan.journey else "(not given)"),
                 screens=", ".join(f"{s.id} ({s.purpose})" for s in plan.screens),
                 themes=", ".join(t for t in self._themes.ids() if t != "base"),
                 recipes="\n".join(f"- {r.id} ({r.page_type}): {r.purpose}" for r in recipes),
@@ -149,4 +153,6 @@ class DirectorAgent(Agent):
             )
         if d.animation not in self._animation_names():
             raise ValidationError(f"unknown animation '{d.animation}'", target="animation")
+        # A link's target must be the kind of page its intent means: the recipe choice decides.
+        validate_intent_targets(plan, d, self._recipes, self._intents)
         return d

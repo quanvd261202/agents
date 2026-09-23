@@ -41,6 +41,17 @@ declared in the component's catalog `slots`. Lists use `listProp` with comma-sep
 Fallback copy is premium, specific-sounding and domain-neutral (it must read well for a cafe, a
 boutique or a studio). No lorem ipsum, no "Feature 1", no SaaS jargon.
 
+## Links and the site (M13)
+
+A section never decides where a control goes. The resolver wires the intents the catalog says a
+role emits into `node.props.hrefs`; read them with `hrefOf(node, "<role>")` from `../ui` and pass
+the result as `href` to `Button` (it renders an `<a>` when given one) or an anchor, and stamp the
+control `data-role="<role>"` so the flow check can find it. Without an href the control stays a
+button or a `#` anchor: that is a dead control the flow check reports, not something to hide.
+Navigation reads `node.props.nav_links`, breadcrumbs `node.props.trail_links`. Live state (cart,
+filters, search) comes from `../site/store` and the current item from `../site/context`; every
+hook returns nothing when the screen is rendered alone, so keep the prop fallbacks.
+
 ## Imagery
 
 `<Media ratio subject src label tone>` is the image. A `media` / `image` slot holds a photo

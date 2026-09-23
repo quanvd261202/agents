@@ -12,6 +12,7 @@ from app.layout import LayoutResolver, LayoutSpec, LayoutType
 from app.models.common import Breakpoint, Density, Intensity
 from app.models.dsl import AnimationIntent, DesignSpec, LayoutIntent, SectionSpec
 from app.models.render import MotionBehavior, RenderModel, RenderNode, ResolvedLayout
+from app.models.site import SiteMap
 from app.recipes import RecipeResolver
 from app.tokens import TokenResolver
 from app.tokens.resolver import ResolvedTokens
@@ -30,6 +31,9 @@ PAGE_ANIMATION_ALIASES: dict[str, tuple[str, Intensity]] = {
 class ResolverContext:
     reduced_motion: bool = False
     page_animation: AnimationIntent | None = None
+    #: The site this screen belongs to, when it is resolved as part of one: hrefs come from it.
+    site: SiteMap | None = None
+    screen_id: str = ""
 
 
 class DesignResolver:
@@ -48,15 +52,19 @@ class DesignResolver:
         self._animations = animations
 
     # ---------------------------------------------------------------------------------------
-    def resolve(self, spec: DesignSpec, *, reduced_motion: bool = False) -> RenderModel:
+    def resolve(
+        self, spec: DesignSpec, *, reduced_motion: bool = False, site: SiteMap | None = None
+    ) -> RenderModel:
         try:
-            return self._resolve(spec, reduced_motion)
+            return self._resolve(spec, reduced_motion, site)
         except ValidationError:
             raise
         except Exception as e:  # noqa: BLE001 - convert to a structured, non-silent failure
             raise ResolutionError(f"resolution failed for {spec.screen_id}: {e}") from e
 
-    def _resolve(self, spec: DesignSpec, reduced_motion: bool) -> RenderModel:
+    def _resolve(
+        self, spec: DesignSpec, reduced_motion: bool, site: SiteMap | None = None
+    ) -> RenderModel:
         spec = self._recipes.resolve(spec)  # recipe expansion + defaults + hierarchy validation
         recipe = self._recipes._validator._recipes.get(spec.recipe)
         tokens = self._tokens.resolve(
@@ -67,7 +75,10 @@ class DesignResolver:
             radius=spec.radius,
         )
         ctx = ResolverContext(
-            reduced_motion=reduced_motion, page_animation=self._page_animation(spec.animation)
+            reduced_motion=reduced_motion,
+            page_animation=self._page_animation(spec.animation),
+            site=site,
+            screen_id=spec.screen_id,
         )
 
         children = self._compose_shell(recipe.shell, spec.sections, ctx)
@@ -89,7 +100,10 @@ class DesignResolver:
             },
         )
         choreograph(root, page_intensity, self._animations)
-        return self._model(spec.screen_id, spec.theme, tokens, root, reduced_motion)
+        model = self._model(spec.screen_id, spec.theme, tokens, root, reduced_motion)
+        if site is not None:
+            model.route = site.route(spec.screen_id)
+        return model
 
     def preview(
         self,
@@ -227,6 +241,9 @@ class DesignResolver:
             props["images"] = {
                 slot: [ref.model_dump() for ref in refs] for slot, refs in s.images.items()
             }
+        if s.binding is not None:
+            props["binding"] = s.binding.model_dump()
+        self._wire(comp, s, props, ctx)
         props["parts"] = [p.name for p in comp.implementation.parts]
         return RenderNode(
             id=s.id,
@@ -239,6 +256,43 @@ class DesignResolver:
             motion=motion,
             children=children,
         )
+
+    @staticmethod
+    def _wire(
+        comp: ComponentDefinition, s: SectionSpec, props: dict[str, object], ctx: ResolverContext
+    ) -> None:
+        """M13: each role the component emits gets the href of the first intent this screen links
+        with. A role whose intents the screen never links stays out, so the frontend renders a
+        dead control the flow check can report; a per-item target needs the section's binding.
+        Two roles on one section never share a destination: a secondary CTA that could only
+        repeat the primary stays dead rather than pointing at the same page."""
+        site = ctx.site
+        if site is None or not comp.emits:
+            return
+        hrefs: dict[str, str] = {}
+        for role, intents in comp.emits.items():
+            if intents == ["*"]:
+                if role == "nav":
+                    props["nav_links"] = [n.model_dump() for n in site.nav()]
+                elif role == "trail":
+                    props["trail_links"] = [
+                        {
+                            "screen": sid,
+                            "label": site.screen(sid).nav_label or sid,
+                            "href": site.route(sid),
+                        }
+                        for sid in site.trail(ctx.screen_id)
+                    ]
+                continue
+            item = s.binding.item if s.binding is not None else None
+            for intent in intents:
+                target = site.target(ctx.screen_id, [intent])
+                href = site.href(target, item) if target is not None else None
+                if href is not None and href not in hrefs.values():
+                    hrefs[role] = href
+                    break
+        if hrefs:
+            props["hrefs"] = hrefs
 
     def _resolve_layout(
         self,

@@ -11,8 +11,17 @@ from pydantic import BaseModel
 from app.core.exceptions import UIBuilderError
 from app.core.logging import get_logger
 from app.core.telemetry import collect
+from app.flow import assemble_site, default_runtime_state
 from app.graph.state import AgentState, ScreenState
-from app.models import DesignDirection, DesignSpec, ScreenPlan
+from app.models import (
+    DesignDirection,
+    DesignSpec,
+    RenderContext,
+    RenderModel,
+    ScreenPlan,
+    SiteMap,
+    UXPlan,
+)
 from app.services.container import Services
 from app.services.repositories import RunRepository
 
@@ -20,7 +29,10 @@ log = get_logger(__name__)
 Node = Callable[[Any], Awaitable[dict[str, Any]]]
 
 #: Persisted stages hold the render's findings and timing, never its screenshots or HTML.
-_STAGE_EXCLUDES: dict[str, set[str]] = {"render_result": {"screenshots", "html", "dom_outline"}}
+_STAGE_EXCLUDES: dict[str, set[str]] = {
+    "render_result": {"screenshots", "html", "dom_outline"},
+    "site_model": {"screens"},
+}
 
 
 def _require(state: AgentState | ScreenState, key: str) -> Any:
@@ -86,7 +98,46 @@ def make_run_nodes(svc: Services) -> dict[str, Node]:
         )
         return {"design_direction": d}
 
-    nodes = {"clarifier": clarifier, "planner": planner, "design_director": design_director}
+    async def content_model(state: AgentState) -> dict[str, Any]:
+        model = await svc.content.compose(
+            _require(state, "clarified_requirements"),
+            _require(state, "ux_plan"),
+            state.get("user_requirement", ""),
+        )
+        return {"content_model": model}
+
+    async def assemble(state: AgentState) -> dict[str, Any]:
+        """Fan-in: the built screens become one site, its journeys are walked in a browser, and
+        a plan that lets a journey down is repaired by patches and walked again, once."""
+        plan: UXPlan = _require(state, "ux_plan")
+        direction: DesignDirection = _require(state, "design_direction")
+        content = state.get("content_model")
+        built: list[tuple[str, DesignSpec, RenderModel]] = []
+        for s in state.get("screens") or []:
+            spec, model = s.get("design_spec"), s.get("resolved_design")
+            if spec is not None and model is not None:
+                built.append((s["screen"].id, spec, model))
+        models = {sid: model for sid, _, model in built}
+        site = assemble_site(plan, content, models)
+        report = await svc.flow.check(site, plan.journey)
+        fix = None
+        if not report.accepted or report.dead:
+            fix = await svc.flow_fixer.fix(plan, report, direction)
+            if fix.status == "success":
+                plan = svc.flow_fixer.apply(plan, fix)
+                site_map = SiteMap.from_plan(plan)
+                models = {sid: svc.resolver.resolve(spec, site=site_map) for sid, spec, _ in built}
+                site = assemble_site(plan, content, models)
+                report = await svc.flow.check(site, plan.journey)
+        return {"ux_plan": plan, "site_model": site, "flow_report": report, "flow_fix": fix}
+
+    nodes = {
+        "clarifier": clarifier,
+        "planner": planner,
+        "design_director": design_director,
+        "content_model": content_model,
+        "assemble": assemble,
+    }
     return {name: instrument(name, fn, svc.runs) for name, fn in nodes.items()}
 
 
@@ -128,6 +179,7 @@ def make_screen_nodes(svc: Services) -> dict[str, Node]:
             _require(state, "design_direction"),
             _require(state, "design_spec"),
             state.get("user_requirement", ""),
+            state.get("content_model"),
         )
         return {"design_spec": spec}
 
@@ -135,10 +187,21 @@ def make_screen_nodes(svc: Services) -> dict[str, Node]:
         return {"design_spec": await svc.imagery.illustrate(_require(state, "design_spec"))}
 
     async def resolver(state: ScreenState) -> dict[str, Any]:
-        return {"resolved_design": svc.resolver.resolve(_require(state, "design_spec"))}
+        model = svc.resolver.resolve(_require(state, "design_spec"), site=state.get("site_map"))
+        return {"resolved_design": model}
 
     async def renderer(state: ScreenState) -> dict[str, Any]:
-        return {"render_result": await svc.renderer.render(_require(state, "resolved_design"))}
+        # Captured inside its site with a seeded cart, so the screenshot shows the real
+        # navigation and a cart with lines; the model itself carries none of that.
+        site, content = state.get("site_map"), state.get("content_model")
+        context = (
+            RenderContext(site=site, content=content, state=default_runtime_state(content))
+            if site is not None
+            else None
+        )
+        return {
+            "render_result": await svc.renderer.render(_require(state, "resolved_design"), context)
+        }
 
     async def verifier(state: ScreenState) -> dict[str, Any]:
         spec: DesignSpec = _require(state, "design_spec")

@@ -6,7 +6,7 @@ import {
   Leaf, Lock, MapPin, Package, Palette, Play, Quote, ShieldCheck, Sparkles, Star, Truck, Users, Zap,
   type LucideIcon,
 } from "lucide-react";
-import { Avatar, Badge, Button, Carousel, Eyebrow, Marquee, Media, Rating, Section, SectionHeader, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject } from "../ui";
+import { Avatar, Badge, Button, Carousel, Eyebrow, Marquee, Media, Rating, Section, SectionHeader, hrefOf, imageAt, listProp, prop, range, subjectOf, variantOf, type Subject } from "../ui";
 import { cn } from "../lib/cn";
 import type { RenderNode } from "../types";
 import type { NodeProps, SectionMap } from "./types";
@@ -48,8 +48,8 @@ function HeroCopy({ node, align = "start", size = "h1" }: NodeProps & { align?: 
         {prop(node, "subhead", "Small-batch goods chosen with care, delivered while they are at their best.")}
       </p>
       <div className="mt-2 flex flex-wrap gap-3">
-        <Button size="lg" arrow>{prop(node, "primary_cta", "Shop the collection")}</Button>
-        <Button size="lg" variant="secondary">{prop(node, "secondary_cta", "Our story")}</Button>
+        <Button size="lg" arrow href={hrefOf(node, "primary_cta")} data-role="primary_cta">{prop(node, "primary_cta", "Shop the collection")}</Button>
+        <Button size="lg" variant="secondary" href={hrefOf(node, "secondary_cta")} data-role="secondary_cta">{prop(node, "secondary_cta", "Our story")}</Button>
       </div>
     </div>
   );
@@ -380,7 +380,7 @@ function FeatureBento({ node, children, hasChildren }: NodeProps) {
   return (
     <Section label={title} tone={premium ? "surface" : "default"} wide={premium}>
       <SectionHeader eyebrow={eyebrow} title={title} body={subtitle} align={premium ? "center" : "start"}
-        action={premium ? undefined : <Button variant="link" arrow>{prop(node, "cta", "See how we work")}</Button>} />
+        action={premium ? undefined : <Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "See how we work")}</Button>} />
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4 lg:auto-rows-[minmax(15rem,auto)]">
         {/* A: the large media tile */}
         {premium ? (
@@ -556,7 +556,7 @@ function ProductShowcase({ node }: NodeProps) {
           <div>
             <SectionHeader eyebrow={eyebrow} title={title} body={subtitle} className="mb-8 md:mb-10" />
             <ul className="space-y-6">{range(Math.min(3, points.length)).map((i) => <ShowcasePoint key={i} Icon={icons[i]} {...pt(i)} />)}</ul>
-            <Button className="mt-10" arrow>{prop(node, "cta", "Take a look")}</Button>
+            <Button className="mt-10" arrow href={hrefOf(node, "cta")} data-role="cta">{prop(node, "cta", "Take a look")}</Button>
           </div>
           <div className="relative">
             <div aria-hidden className="absolute -inset-8 rounded-lg bg-accent/10 blur-2xl" />
@@ -816,7 +816,7 @@ function PricingTable({ node, columns }: NodeProps) {
         <p className="mt-1 min-h-6 text-small text-muted">
           {toggle ? (yearly ? `Billed yearly · save ${pct}%` : "Billed monthly") : prop(node, "billing_note", "Billed monthly · no commitment")}
         </p>
-        <Button className="mt-8 w-full" variant={hot ? "primary" : "secondary"} arrow={hot}>
+        <Button className="mt-8 w-full" variant={hot ? "primary" : "secondary"} arrow={hot} href={hrefOf(node, "cta")} data-role="cta">
           {prop(node, "cta", "Choose")} {p.name}
         </Button>
         <ul className="mt-8 space-y-3 border-t border-border pt-8">
@@ -860,8 +860,8 @@ function PricingTable({ node, columns }: NodeProps) {
 function CTAButtons({ node, center }: NodeProps & { center?: boolean }) {
   return (
     <div className={cn("flex flex-wrap gap-3", center && "justify-center")}>
-      <Button size="lg" arrow>{prop(node, "primary_cta", "Start your order")}</Button>
-      <Button size="lg" variant="secondary">{prop(node, "secondary_cta", "Talk to us")}</Button>
+      <Button size="lg" arrow href={hrefOf(node, "primary_cta")} data-role="primary_cta">{prop(node, "primary_cta", "Start your order")}</Button>
+      <Button size="lg" variant="secondary" href={hrefOf(node, "secondary_cta")} data-role="secondary_cta">{prop(node, "secondary_cta", "Talk to us")}</Button>
     </div>
   );
 }

@@ -7,8 +7,12 @@ import {
   Globe, House, Inbox, LayoutDashboard, LifeBuoy, Mail, Menu, Package, Plus, Receipt, Search, Settings,
   Share2, ShoppingBag, SlidersHorizontal, Sparkles, Store, User, UserPlus, Users, X, type LucideProps,
 } from "lucide-react";
-import { Avatar, Button, Eyebrow, Media, Section, listProp, prop, variantOf } from "../ui";
+import { Avatar, Button, Eyebrow, Media, Section, hrefOf, listProp, prop, variantOf } from "../ui";
 import { cn } from "../lib/cn";
+import { useItem, useRouteItem, useSite } from "../site/context";
+import { navigate } from "../site/router";
+import { cartCount, runtime, useRuntime } from "../site/store";
+import type { NavItem } from "../site/types";
 import type { NodeProps, SectionMap } from "./types";
 
 type Icon = ComponentType<LucideProps>;
@@ -21,9 +25,9 @@ const MOTION_CSS = `
 @keyframes uib-sheet-left { from { transform: translateX(-100%); } }
 @keyframes uib-overlay { from { opacity: 0; } }`;
 
-function Logo({ name, mark = true, className }: { name: string; mark?: boolean; className?: string }) {
+function Logo({ name, mark = true, className, href }: { name: string; mark?: boolean; className?: string; href?: string }) {
   return (
-    <a href="#top" aria-label={`${name}, home`}
+    <a href={href ?? "#top"} aria-label={`${name}, home`} data-role="logo"
       className={cn("inline-flex min-h-11 min-w-0 items-center gap-2.5 rounded-button font-heading-set text-h4 leading-none text-fg", className)}>
       {mark && (
         <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-button bg-primary text-small font-bold text-primary-fg">
@@ -59,29 +63,44 @@ const NAV_ACTIONS: Record<string, string[]> = {
   centered: ["Search", "Account", "Cart"],
 };
 
-function CartButton({ count }: { count: string }) {
-  return (
-    // data-cart-target: where the motion runtime flies an added product; data-cart-count: what it bumps.
-    <IconButton label={`Cart, ${count} ${count === "1" ? "item" : "items"}`} data-cart-target="">
-      <ShoppingBag className="size-5" aria-hidden />
-      {count !== "0" && (
-        <span aria-hidden data-cart-count="" className="absolute right-0.5 top-0.5 grid h-5 min-w-5 place-items-center rounded-pill bg-accent px-1 text-caption font-bold leading-none text-accent-fg tabular-nums ring-2 ring-bg">
-          {count}
-        </span>)}
-    </IconButton>
-  );
+function CartButton({ count, href }: { count: string; href?: string }) {
+  const label = `Cart, ${count} ${count === "1" ? "item" : "items"}`;
+  // data-cart-target: where the motion runtime flies an added product; data-cart-count: what it bumps.
+  const inner = <>
+    <ShoppingBag className="size-5" aria-hidden />
+    {count !== "0" && (
+      <span aria-hidden data-cart-count="" className="absolute right-0.5 top-0.5 grid h-5 min-w-5 place-items-center rounded-pill bg-accent px-1 text-caption font-bold leading-none text-accent-fg tabular-nums ring-2 ring-bg">
+        {count}
+      </span>)}
+  </>;
+  if (href) {
+    return (
+      <a href={href} aria-label={label} data-cart-target="" data-role="cart"
+        className="relative grid size-11 shrink-0 place-items-center rounded-pill text-fg transition-[background-color,transform] duration-200 ease-brand hover:bg-fg/[0.06] active:scale-95">
+        {inner}</a>
+    );
+  }
+  return <IconButton label={label} data-cart-target="">{inner}</IconButton>;
 }
 
-function NavLink({ label, className }: { label: string; className?: string }) {
+type NavEntry = { label: string; href?: string };
+/** Main navigation: the site map's items when the screen is part of a site, else the slot's labels. */
+function navEntries(node: NodeProps["node"], fallback: string[]): NavEntry[] {
+  const items = node.props.nav_links as NavItem[] | undefined;
+  if (items?.length) return items.map((n) => ({ label: n.label, href: n.href }));
+  return listProp(node, "links", fallback).map((label) => ({ label }));
+}
+
+function NavLink({ label, href, current, className }: NavEntry & { current?: boolean; className?: string }) {
   return (
-    <a href={slug(label)}
+    <a href={href ?? slug(label)} aria-current={current ? "page" : undefined}
       className={cn("relative inline-flex min-h-11 items-center whitespace-nowrap rounded-button px-3 text-small font-medium text-muted transition-colors duration-200 hover:text-fg",
         "after:absolute after:inset-x-3 after:bottom-2 after:h-px after:origin-left after:scale-x-0 after:bg-current after:transition-transform after:duration-300 after:ease-brand hover:after:scale-x-100 focus-visible:after:scale-x-100",
-        className)}>{label}</a>
+        current && "text-fg after:scale-x-100", className)}>{label}</a>
   );
 }
 
-function MobileMenu({ logo, links, buttons, side = "right" }: { logo: string; links: string[]; buttons: NavAction[]; side?: "left" | "right" }) {
+function MobileMenu({ logo, links, buttons, side = "right" }: { logo: string; links: NavEntry[]; buttons: (NavAction & { href?: string })[]; side?: "left" | "right" }) {
   const [open, setOpen] = useState(false);
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -101,17 +120,17 @@ function MobileMenu({ logo, links, buttons, side = "right" }: { logo: string; li
           <nav aria-label="Mobile" className="mt-10">
             <ul className="divide-y divide-border border-y border-border">
               {links.map((l) => (
-                <li key={l}>
-                  <a href={slug(l)} onClick={() => setOpen(false)}
+                <li key={l.label}>
+                  <a href={l.href ?? slug(l.label)} onClick={() => setOpen(false)}
                     className="group flex min-h-14 items-center justify-between font-heading-set text-h4 transition-colors hover:text-muted">
-                    {l}<ArrowRight aria-hidden className="size-4 -translate-x-1 opacity-0 transition-[opacity,transform] duration-300 ease-brand group-hover:translate-x-0 group-hover:opacity-100" />
+                    {l.label}<ArrowRight aria-hidden className="size-4 -translate-x-1 opacity-0 transition-[opacity,transform] duration-300 ease-brand group-hover:translate-x-0 group-hover:opacity-100" />
                   </a>
                 </li>))}
             </ul>
           </nav>
           <div className="mt-auto grid gap-3 pt-8">
             {buttons.map((b, i) => (
-              <Button key={b.label} variant={i === buttons.length - 1 ? "primary" : "secondary"} className="w-full">{b.label}</Button>))}
+              <Button key={b.label} href={b.href} variant={i === buttons.length - 1 ? "primary" : "secondary"} className="w-full">{b.label}</Button>))}
           </div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -122,19 +141,24 @@ function MobileMenu({ logo, links, buttons, side = "right" }: { logo: string; li
 function NavBar({ node }: NodeProps) {
   const variant = variantOf(node);
   const logo = prop(node, "logo", "Maison Nord");
-  const allLinks = listProp(node, "links", ["Shop", "Collections", "Journal", "About", "Visit"]);
+  const { site, path } = useSite();
+  const rt = useRuntime();
+  const allLinks = navEntries(node, ["Shop", "Collections", "Journal", "About", "Visit"]).map((l) => ({ ...l, current: !!l.href && l.href === path }));
   const links = variant === "minimal" ? allLinks.slice(0, 3) : allLinks;
+  const home = hrefOf(node, "logo");
   const actions = listProp(node, "actions", NAV_ACTIONS[variant] ?? NAV_ACTIONS.standard).map(classifyAction);
-  const cartCount = prop(node, "cart_count", "2");
-  const hasCart = actions.some((a) => a.kind === "cart");
+  // On a site the badge is the live cart; a lone screenshot shows the written count.
+  const count = site ? String(cartCount(rt)) : prop(node, "cart_count", "2");
+  const hasCart = actions.some((a) => a.kind === "cart") || !!hrefOf(node, "cart");
   const hasSearch = actions.some((a) => a.kind === "search");
-  const buttons = actions.filter((a) => a.kind === "button" || a.kind === "account");
-  const primary = actions.filter((a) => a.kind === "button").at(-1);
-  const account = actions.find((a) => a.kind === "account");
+  const buttons = actions.filter((a) => a.kind === "button" || a.kind === "account")
+    .map((a) => ({ ...a, href: hrefOf(node, a.kind === "account" ? "account" : "cta") }));
+  const primary = buttons.filter((a) => a.kind === "button").at(-1);
+  const account = buttons.find((a) => a.kind === "account");
   const menu = <MobileMenu logo={logo} links={allLinks} buttons={buttons} side={variant === "centered" ? "left" : "right"} />;
 
   const searchBtn = hasSearch && <IconButton label="Search" className="hidden sm:grid"><Search className="size-5" aria-hidden /></IconButton>;
-  const cartBtn = hasCart && <CartButton count={cartCount} />;
+  const cartBtn = hasCart && <CartButton count={count} href={hrefOf(node, "cart")} />;
 
   if (variant === "centered") {
     // Boutique pattern: the wordmark owns the centre, links split either side of it.
@@ -144,15 +168,17 @@ function NavBar({ node }: NodeProps) {
         <div className="container-wide grid h-20 grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex items-center">
             {menu}
-            <nav aria-label="Main" className="hidden items-center lg:flex">{links.slice(0, half).map((l) => <NavLink key={l} label={l} />)}</nav>
+            <nav aria-label="Main" className="hidden items-center lg:flex">{links.slice(0, half).map((l) => <NavLink key={l.label} {...l} />)}</nav>
           </div>
-          <Logo name={logo} mark={false} className="justify-self-center text-h3 tracking-tight" />
+          <Logo name={logo} mark={false} href={home} className="justify-self-center text-h3 tracking-tight" />
           <div className="flex items-center justify-end gap-1">
-            <nav aria-label="More" className="mr-2 hidden items-center lg:flex">{links.slice(half).map((l) => <NavLink key={l} label={l} />)}</nav>
+            <nav aria-label="More" className="mr-2 hidden items-center lg:flex">{links.slice(half).map((l) => <NavLink key={l.label} {...l} />)}</nav>
             {searchBtn}
-            {account && <IconButton label={account.label} className="hidden sm:grid"><User className="size-5" aria-hidden /></IconButton>}
+            {account && (account.href
+              ? <a href={account.href} aria-label={account.label} data-role="account" className="hidden size-11 place-items-center rounded-pill text-fg transition-colors hover:bg-fg/[0.06] sm:grid"><User className="size-5" aria-hidden /></a>
+              : <IconButton label={account.label} className="hidden sm:grid"><User className="size-5" aria-hidden /></IconButton>)}
             {cartBtn}
-            {primary && <Button size="sm" className="ml-2 hidden sm:inline-flex">{primary.label}</Button>}
+            {primary && <Button size="sm" href={primary.href} data-role="cta" className="ml-2 hidden sm:inline-flex">{primary.label}</Button>}
           </div>
         </div>
       </header>
@@ -164,17 +190,17 @@ function NavBar({ node }: NodeProps) {
     return (
       <header aria-label="Site header" className="relative z-40 bg-transparent page-x">
         <div className="container-wide grid h-24 grid-cols-[1fr_auto] items-center gap-6 lg:grid-cols-[1fr_auto_1fr]">
-          <Logo name={logo} />
+          <Logo name={logo} href={home} />
           <nav aria-label="Main" className="hidden items-center rounded-pill bg-fg/[0.05] p-1 backdrop-blur-md lg:flex">
             {links.map((l) => (
-              <a key={l} href={slug(l)}
-                className="inline-flex min-h-10 items-center whitespace-nowrap rounded-pill px-4 text-small font-medium text-fg transition-[background-color,box-shadow] duration-200 ease-brand hover:bg-bg hover:shadow-sm">
-                {l}</a>))}
+              <a key={l.label} href={l.href ?? slug(l.label)} aria-current={l.current ? "page" : undefined}
+                className={cn("inline-flex min-h-10 items-center whitespace-nowrap rounded-pill px-4 text-small font-medium text-fg transition-[background-color,box-shadow] duration-200 ease-brand hover:bg-bg hover:shadow-sm", l.current && "bg-bg shadow-sm")}>
+                {l.label}</a>))}
           </nav>
           <div className="flex items-center justify-end gap-2">
-            {account && <Button variant="ghost" size="sm" className="hidden rounded-pill lg:inline-flex">{account.label}</Button>}
+            {account && <Button variant="ghost" size="sm" href={account.href} data-role="account" className="hidden rounded-pill lg:inline-flex">{account.label}</Button>}
             {cartBtn}
-            {primary && <Button size="sm" arrow className="hidden rounded-pill sm:inline-flex">{primary.label}</Button>}
+            {primary && <Button size="sm" arrow href={primary.href} data-role="cta" className="hidden rounded-pill sm:inline-flex">{primary.label}</Button>}
             {menu}
           </div>
         </div>
@@ -186,11 +212,11 @@ function NavBar({ node }: NodeProps) {
     return (
       <header aria-label="Site header" className="relative z-40 bg-bg page-x">
         <div className="container-page flex h-16 items-center justify-between gap-6">
-          <Logo name={logo} className="text-body font-semibold" />
+          <Logo name={logo} href={home} className="text-body font-semibold" />
           <div className="flex items-center gap-2">
-            <nav aria-label="Main" className="hidden items-center md:flex">{links.map((l) => <NavLink key={l} label={l} />)}</nav>
+            <nav aria-label="Main" className="hidden items-center md:flex">{links.map((l) => <NavLink key={l.label} {...l} />)}</nav>
             {cartBtn}
-            {primary && <Button variant="link" arrow className="ml-3 hidden min-h-11 px-0 text-small md:inline-flex">{primary.label}</Button>}
+            {primary && <Button variant="link" arrow href={primary.href} data-role="cta" className="ml-3 hidden min-h-11 px-0 text-small md:inline-flex">{primary.label}</Button>}
             <div className="md:hidden">{menu}</div>
           </div>
         </div>
@@ -201,13 +227,13 @@ function NavBar({ node }: NodeProps) {
   return (
     <header aria-label="Site header" className="sticky top-0 z-40 border-b border-border bg-bg/90 backdrop-blur-md page-x">
       <div className="container-wide flex h-[72px] items-center gap-8">
-        <Logo name={logo} />
-        <nav aria-label="Main" className="hidden flex-1 items-center gap-1 lg:flex">{links.map((l) => <NavLink key={l} label={l} />)}</nav>
+        <Logo name={logo} href={home} />
+        <nav aria-label="Main" className="hidden flex-1 items-center gap-1 lg:flex">{links.map((l) => <NavLink key={l.label} {...l} />)}</nav>
         <div className="ml-auto flex items-center gap-1.5">
           {searchBtn}
-          {account && <Button variant="ghost" size="sm" className="hidden lg:inline-flex">{account.label}</Button>}
+          {account && <Button variant="ghost" size="sm" href={account.href} data-role="account" className="hidden lg:inline-flex">{account.label}</Button>}
           {cartBtn}
-          {primary && <Button size="sm" className="ml-1.5 hidden sm:inline-flex">{primary.label}</Button>}
+          {primary && <Button size="sm" href={primary.href} data-role="cta" className="ml-1.5 hidden sm:inline-flex">{primary.label}</Button>}
           {menu}
         </div>
       </div>
@@ -408,11 +434,23 @@ function Sidebar({ node }: NodeProps) {
 }
 
 /* ================================================================== Breadcrumb */
+type Crumb = { label: string; href: string };
+/** The site map's trail when the screen is part of a site (the last crumb named after the opened
+ * item, or the written trail's last entry), else the `items` slot with anchor hrefs. */
+function useCrumbs(node: NodeProps["node"]): Crumb[] {
+  const routeItem = useRouteItem();
+  const written = listProp(node, "items", ["Home", "Shop", "Tea", "Garden Reserve"]);
+  const trail = node.props.trail_links as { screen: string; label: string; href: string }[] | undefined;
+  if (!trail?.length) return written.map((label) => ({ label, href: slug(label) }));
+  const last = routeItem?.title ?? (prop(node, "items", "") ? written[written.length - 1] : trail[trail.length - 1].label);
+  return trail.map((t, i) => ({ label: i === trail.length - 1 ? last : t.label, href: t.href }));
+}
+
 function Breadcrumb({ node }: NodeProps) {
   const variant = variantOf(node);
-  const trail = listProp(node, "items", ["Home", "Shop", "Tea", "Garden Reserve"]);
+  const trail = useCrumbs(node);
   const [expanded, setExpanded] = useState(false);
-  const current = trail[trail.length - 1];
+  const current = trail[trail.length - 1].label;
   const parents = trail.slice(0, -1);
 
   if (variant === "compact") {
@@ -421,8 +459,8 @@ function Breadcrumb({ node }: NodeProps) {
         <div className="container-page">
           <ol className="inline-flex max-w-full flex-wrap items-center gap-x-0.5 rounded-pill border border-border bg-surface px-2 text-small">
             {parents.map((c) => (
-              <li key={c} className="flex items-center gap-0.5">
-                <a href={slug(c)} className="inline-flex min-h-10 items-center rounded-pill px-2.5 text-muted transition-colors hover:bg-fg/[0.05] hover:text-fg">{c}</a>
+              <li key={c.label} className="flex items-center gap-0.5">
+                <a href={c.href} className="inline-flex min-h-10 items-center rounded-pill px-2.5 text-muted transition-colors hover:bg-fg/[0.05] hover:text-fg">{c.label}</a>
                 <span aria-hidden className="text-muted/60">/</span>
               </li>))}
             <li><span aria-current="page" className="inline-flex min-h-10 items-center px-2.5 font-semibold text-fg">{current}</span></li>
@@ -440,10 +478,10 @@ function Breadcrumb({ node }: NodeProps) {
           {parents.map((c, i) => {
             const hideOnPhone = collapsible && i > 0;
             return (
-              <li key={c} className={cn("flex items-center gap-1", hideOnPhone && "hidden sm:flex")}>
-                <a href={slug(c)} aria-label={i === 0 ? c : undefined}
+              <li key={c.label} className={cn("flex items-center gap-1", hideOnPhone && "hidden sm:flex")}>
+                <a href={c.href} aria-label={i === 0 ? c.label : undefined}
                   className="inline-flex min-h-11 items-center gap-1.5 rounded-sm px-1.5 text-muted underline-offset-4 transition-colors hover:text-fg hover:underline">
-                  {i === 0 ? <><House aria-hidden className="size-4" /><span className="hidden sm:inline">{c}</span></> : c}
+                  {i === 0 ? <><House aria-hidden className="size-4" /><span className="hidden sm:inline">{c.label}</span></> : c.label}
                 </a>
                 <ChevronRight aria-hidden className="size-3.5 text-muted" />
               </li>
@@ -602,17 +640,20 @@ function SocialLinks({ networks, className }: { networks: string[]; className?: 
   );
 }
 
-function FooterColumns({ columns, className }: { columns: string[]; className?: string }) {
+function FooterColumns({ columns, className, nav }: { columns: string[]; className?: string; nav?: NavItem[] }) {
+  // On a site the first column is the real navigation; the rest keep their sample links.
+  const entries = (c: string, i: number): { label: string; href: string }[] =>
+    i === 0 && nav?.length ? nav.map((n) => ({ label: n.label, href: n.href })) : linksFor(c).map((l) => ({ label: l, href: slug(l) }));
   return (
     <div className={cn("grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-[repeat(var(--fcols),minmax(0,1fr))]", className)}
       style={{ ["--fcols" as string]: Math.min(columns.length, 5) }}>
-      {columns.map((c) => (
+      {columns.map((c, i) => (
         <div key={c}>
           <h2 className="text-small font-semibold text-fg">{c}</h2>
           <ul className="mt-3">
-            {linksFor(c).map((l) => (
-              <li key={l}>
-                <a href={slug(l)} className="inline-flex min-h-10 items-center text-small text-muted transition-colors duration-200 hover:text-fg">{l}</a>
+            {entries(c, i).map((l) => (
+              <li key={l.label}>
+                <a href={l.href} className="inline-flex min-h-10 items-center text-small text-muted transition-colors duration-200 hover:text-fg">{l.label}</a>
               </li>))}
           </ul>
         </div>))}
@@ -635,13 +676,15 @@ function Footer({ node }: NodeProps) {
   const tagline = prop(node, "tagline", "Small-batch goods, chosen slowly and shared generously since 2014.");
   const legal = prop(node, "legal", `© 2026 ${logo}. All rights reserved.`);
   const social = listProp(node, "social", ["Instagram", "Pinterest", "YouTube"]);
+  const home = hrefOf(node, "logo");
+  const nav = node.props.nav_links as NavItem[] | undefined;
 
   if (variant === "minimal") {
     return (
       <footer aria-label="Footer" className="border-t border-border bg-bg page-x py-6">
         <div className="container-wide flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-between sm:text-left">
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-            <Logo name={logo} mark={false} className="text-body font-semibold" />
+            <Logo name={logo} mark={false} href={home} className="text-body font-semibold" />
             <p className="text-small text-muted">{legal}</p>
           </div>
           <LegalLinks />
@@ -674,12 +717,12 @@ function Footer({ node }: NodeProps) {
 
           <div className="grid gap-14 py-14 lg:grid-cols-12">
             <div className="space-y-6 lg:col-span-4">
-              <Logo name={logo} />
+              <Logo name={logo} href={home} />
               <p className="max-w-xs text-body text-muted">{tagline}</p>
               <address className="not-italic text-small text-muted">{prop(node, "contact", "14 Rue des Ateliers, Lyon · hello@maisonnord.com")}</address>
               <SocialLinks networks={social} />
             </div>
-            <FooterColumns columns={columns} className="lg:col-span-8" />
+            <FooterColumns columns={columns} nav={nav} className="lg:col-span-8" />
           </div>
 
           <div className="flex flex-col gap-4 border-t border-border py-6 sm:flex-row sm:items-center sm:justify-between">
@@ -703,11 +746,11 @@ function Footer({ node }: NodeProps) {
       <div className="container-wide">
         <div className="grid gap-12 lg:grid-cols-12">
           <div className="space-y-5 lg:col-span-5">
-            <Logo name={logo} />
+            <Logo name={logo} href={home} />
             <p className="max-w-sm text-body text-muted">{tagline}</p>
             <SocialLinks networks={social} />
           </div>
-          <FooterColumns columns={columns} className="lg:col-span-7" />
+          <FooterColumns columns={columns} nav={nav} className="lg:col-span-7" />
         </div>
         <div className="mt-14 flex flex-col gap-3 border-t border-border py-6 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-small text-muted">{legal}</p>
@@ -761,7 +804,7 @@ function AnnouncementBar({ node }: NodeProps) {
         <p className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2 text-center text-small">
           {accent && <span className="rounded-pill bg-fg px-2 py-0.5 text-caption font-bold uppercase tracking-wider text-bg">{prop(node, "badge", "New")}</span>}
           <span className="font-medium">{message}</span>
-          <a href={slug(link)} className="group inline-flex min-h-6 items-center gap-1 font-semibold underline decoration-current/40 underline-offset-4 transition-colors hover:decoration-current">
+          <a href={hrefOf(node, "link_label") ?? slug(link)} data-role="link_label" className="group inline-flex min-h-6 items-center gap-1 font-semibold underline decoration-current/40 underline-offset-4 transition-colors hover:decoration-current">
             {link}<ArrowRight aria-hidden className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
           </a>
         </p>
@@ -842,7 +885,7 @@ function CategoryNav({ node }: NodeProps) {
               </a>
             </li>))}
         </ul>
-        <a href="#all" className="group hidden min-h-11 shrink-0 items-center gap-1.5 text-small font-semibold text-fg md:inline-flex">
+        <a href={hrefOf(node, "cta") ?? "#all"} data-role="cta" className="group hidden min-h-11 shrink-0 items-center gap-1.5 text-small font-semibold text-fg md:inline-flex">
           {prop(node, "cta", "View all")}<ArrowRight aria-hidden className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
         </a>
       </nav>
@@ -971,7 +1014,7 @@ function SectionHeaderBlock({ node }: NodeProps) {
           <h2 className="font-heading-set text-h1 text-balance">{title}</h2>
           <p className="max-w-2xl text-lead text-muted text-pretty">{body}</p>
           <div className="mt-2 flex flex-wrap justify-center gap-3">
-            <Button arrow>{cta}</Button>
+            <Button arrow href={hrefOf(node, "cta")} data-role="cta">{cta}</Button>
             <Button variant="secondary">{prop(node, "secondary_cta", "How we source")}</Button>
           </div>
         </div>
@@ -990,7 +1033,7 @@ function SectionHeaderBlock({ node }: NodeProps) {
           <h2 className="font-heading-set text-h1 text-balance lg:col-span-7">{title}</h2>
           <div className="space-y-6 lg:col-span-4 lg:col-start-9">
             <p className="text-lead text-muted text-pretty">{body}</p>
-            <Button variant="link" arrow className="min-h-11 px-0">{cta}</Button>
+            <Button variant="link" arrow href={hrefOf(node, "cta")} data-role="cta" className="min-h-11 px-0">{cta}</Button>
           </div>
         </div>
       </Section>
@@ -1005,7 +1048,7 @@ function SectionHeaderBlock({ node }: NodeProps) {
           <h2 className="font-heading-set text-h2 text-balance">{title}</h2>
           <p className="text-lead text-muted text-pretty">{body}</p>
         </div>
-        <Button variant="secondary" arrow className="shrink-0 self-start md:self-end">{cta}</Button>
+        <Button variant="secondary" arrow href={hrefOf(node, "cta")} data-role="cta" className="shrink-0 self-start md:self-end">{cta}</Button>
       </div>
     </Section>
   );
@@ -1014,10 +1057,13 @@ function SectionHeaderBlock({ node }: NodeProps) {
 /* ================================================================== StickyCtaBar */
 function StickyCtaBar({ node }: NodeProps) {
   const variant = variantOf(node);
-  const title = prop(node, "title", "Nº1 Signature");
+  const item = useItem(node);
+  const title = item?.title ?? prop(node, "title", "Nº1 Signature");
   const summary = prop(node, "summary", "250 g · Whole bean · Ships tomorrow");
-  const price = prop(node, "price", "$24");
+  const price = item?.price ?? prop(node, "price", "$24");
   const cta = prop(node, "cta", "Add to bag");
+  const go = hrefOf(node, "cta");
+  const buy = () => { if (item) runtime.addToCart(item.id); if (go) navigate(go); };
 
   if (variant === "floating") {
     return (
@@ -1029,7 +1075,7 @@ function StickyCtaBar({ node }: NodeProps) {
             <p className="truncate text-caption text-muted">{summary}</p>
           </div>
           <p className="hidden font-semibold tabular-nums text-fg sm:block">{price}</p>
-          <Button className="shrink-0 rounded-pill px-5"><ShoppingBag aria-hidden className="size-4" /><span className="hidden sm:inline">{cta}</span><span className="sm:hidden">{price}</span></Button>
+          <Button className="shrink-0 rounded-pill px-5" onClick={buy} data-role="cta"><ShoppingBag aria-hidden className="size-4" /><span className="hidden sm:inline">{cta}</span><span className="sm:hidden">{price}</span></Button>
         </div>
       </section>
     );
@@ -1048,7 +1094,7 @@ function StickyCtaBar({ node }: NodeProps) {
           </div>
           <div className="flex shrink-0 gap-2">
             <Button variant="ghost" size="sm" className="h-11">{prop(node, "secondary_cta", "Details")}</Button>
-            <Button size="sm" arrow className="h-11 flex-1 sm:flex-none">{prop(node, "promo_cta", "Claim offer")}</Button>
+            <Button size="sm" arrow href={hrefOf(node, "promo_cta")} data-role="promo_cta" className="h-11 flex-1 sm:flex-none">{prop(node, "promo_cta", "Claim offer")}</Button>
           </div>
         </div>
       </section>
@@ -1068,7 +1114,7 @@ function StickyCtaBar({ node }: NodeProps) {
           <p className="text-caption text-muted">{prop(node, "price_note", "Free delivery over $50")}</p>
         </div>
         <Button variant="secondary" className="hidden h-12 lg:inline-flex">{prop(node, "secondary_cta", "Save for later")}</Button>
-        <Button className="h-12 shrink-0"><Plus aria-hidden className="size-4" />{cta}<span className="md:hidden">· {price}</span></Button>
+        <Button className="h-12 shrink-0" onClick={buy} data-role="cta"><Plus aria-hidden className="size-4" />{cta}<span className="md:hidden">· {price}</span></Button>
       </div>
     </section>
   );

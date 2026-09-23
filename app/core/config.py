@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # tokens-per-minute limits, so keep this low on small rate-limit tiers.
     max_parallel_screens: int = 2
     max_clarifier_questions: int = 3
+    # Items the content model writes for the main collection: enough for filters to visibly narrow
+    # a grid of six or eight.
+    content_items: int = 12
     retrieval_budget_tokens: int = 1500
     log_level: str = "INFO"
 

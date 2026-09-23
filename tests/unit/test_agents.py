@@ -35,7 +35,7 @@ REQ = ClarifiedRequirements(
 PLAN = UXPlan(
     product="shoe store",
     user_goals=["evaluate a shoe"],
-    journey=["browse", "view", "buy"],
+    journey=[],
     screens=[ScreenPlan(id="detail", purpose="product evaluation", key_content=["price"])],
 )
 DIRECTION = DesignDirection(
@@ -118,7 +118,8 @@ async def test_planner_is_limited_to_page_types_the_domain_can_build():
     await PlannerAgent(llm, default_recipe_registry()).plan(REQ)
     system = llm.calls[0][0].content
     assert "cart, checkout, product_detail, product_listing, storefront." in system
-    assert "dashboard" not in system
+    page_types = next(line for line in system.splitlines() if line.startswith("Only these kinds"))
+    assert "dashboard" not in page_types
 
 
 async def test_planner_rejects_duplicate_screen_ids():
@@ -478,7 +479,7 @@ async def test_clarifier_prompt_lists_the_allowed_domains():
 SHOP_PLAN = UXPlan(
     product="shoe store",
     user_goals=["buy shoes"],
-    journey=["discover", "browse", "view", "cart", "checkout"],
+    journey=[],
     screens=[
         ScreenPlan(id="home", purpose="discovery"),
         ScreenPlan(id="listing", purpose="product discovery"),

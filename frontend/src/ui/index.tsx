@@ -26,6 +26,9 @@ export const listProp = (n: RenderNode, key: string, fallback: string[]): string
   return typeof v === "string" && v.trim() ? v.split(",").map((s) => s.trim()).filter(Boolean) : fallback;
 };
 export const variantOf = (n: RenderNode, fallback = "standard"): string => (n.props.variant as string) || fallback;
+/** The href the resolver wired for a role this component emits (M13), or undefined: a dead control. */
+export const hrefOf = (n: RenderNode, role: string): string | undefined =>
+  (n.props.hrefs as Record<string, string> | undefined)?.[role];
 export const range = (n: number) => Array.from({ length: n }, (_, i) => i);
 /** The sourced photograph for position `i` of an image slot, or undefined so the silhouette renders. */
 export const imageAt = (n: RenderNode, slot: string, i = 0): { url: string; alt: string } | undefined => {
@@ -103,15 +106,24 @@ export const buttonVariants = cva(
   },
 );
 
+/** With `href` the button is a real link (M13: the resolver wired a destination); without, a button. */
 export const Button = forwardRef<HTMLButtonElement,
-  ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants> & { arrow?: boolean }>(
-  ({ className, variant, size, arrow, children, ...rest }, ref) => (
-    <button ref={ref} type="button" className={cn(buttonVariants({ variant, size }), className)}
-      data-motion-cta={!variant || variant === "primary" || variant === "accent" || variant === "inverse" ? "" : undefined} {...rest}>
+  ButtonHTMLAttributes<HTMLButtonElement> & VariantProps<typeof buttonVariants> & { arrow?: boolean; href?: string }>(
+  ({ className, variant, size, arrow, children, href, type, disabled, ...rest }, ref) => {
+    const cls = cn(buttonVariants({ variant, size }), className);
+    const cta = !variant || variant === "primary" || variant === "accent" || variant === "inverse" ? "" : undefined;
+    const inner = <>
       {children}
       {arrow && <ArrowRight aria-hidden className="size-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />}
-    </button>
-  ));
+    </>;
+    if (href) {
+      const { onClick, ...anchorRest } = rest as ButtonHTMLAttributes<HTMLButtonElement> & { onClick?: (e: React.MouseEvent<HTMLElement>) => void };
+      return <a href={href} className={cls} data-motion-cta={cta} onClick={onClick} {...(anchorRest as object)}>{inner}</a>;
+    }
+    return (
+      <button ref={ref} type={type ?? "button"} disabled={disabled} className={cls} data-motion-cta={cta} {...rest}>{inner}</button>
+    );
+  });
 Button.displayName = "Button";
 
 export const badgeVariants = cva("inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-caption font-semibold tracking-wide", {
@@ -215,8 +227,9 @@ export function Rating({ value = 4.8, count, className }: { value?: number; coun
   );
 }
 
-export function QuantityStepper({ id, label = "Quantity", initial = 1 }: { id: string; label?: string; initial?: number }) {
-  const [qty, setQty] = useState(initial);
+export function QuantityStepper({ id, label = "Quantity", initial = 1, onChange }: { id: string; label?: string; initial?: number; onChange?: (qty: number) => void }) {
+  const [qty, setQtyState] = useState(initial);
+  const setQty = (f: (q: number) => number) => setQtyState((q) => { const n = f(q); onChange?.(n); return n; });
   return (
     <div className="inline-flex h-12 items-center rounded-button border border-border" role="group" aria-labelledby={`${id}-label`}>
       <span id={`${id}-label`} className="sr-only">{label}</span>

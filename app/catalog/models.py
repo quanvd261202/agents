@@ -63,6 +63,15 @@ class ComponentDefinition(StrictModel):
     default_variant: str = "standard"
     slots: list[SlotDefinition] = Field(default_factory=list)
     allowed_children: list[str] = Field(default_factory=list)  # semantic ids; empty = leaf
+    #: Content-model item field -> slot, for a component that shows one item (a card, a buy
+    #: box). Non-empty means the Copywriter binds the section to an item and these slots take
+    #: the item's values, so every screen agrees on names and prices.
+    binds: dict[str, str] = Field(default_factory=dict)
+    #: Role -> intents it can carry, in order of preference. The resolver gives the role the href
+    #: of the first intent the screen actually links with. Roles are CTA slots (`primary_cta`),
+    #: structural parts (`card`, `logo`, `cart`) or `nav` / `trail` for the site's main
+    #: navigation and breadcrumb trail.
+    emits: dict[str, list[str]] = Field(default_factory=dict)
     responsive_behavior: ResponsiveBehavior = Field(default_factory=ResponsiveBehavior)
     implementation: ImplementationMapping
     animation_capabilities: list[str] = Field(default_factory=lambda: ["fade", "fade_up"])

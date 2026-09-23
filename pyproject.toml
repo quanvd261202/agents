@@ -72,7 +72,7 @@ include_external_packages = true
 [[tool.importlinter.contracts]]
 name = "Deterministic engine is LLM-free"
 type = "forbidden"
-source_modules = ["app.dsl", "app.layout", "app.animation", "app.catalog", "app.renderer", "app.tokens", "app.recipes", "app.imagery"]
+source_modules = ["app.dsl", "app.layout", "app.animation", "app.catalog", "app.renderer", "app.tokens", "app.recipes", "app.imagery", "app.flow"]
 forbidden_modules = [
     "app.core.llm", "app.agents",
     "langchain", "langchain_core", "langchain_openai", "langchain_anthropic", "openai",

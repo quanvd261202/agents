@@ -47,6 +47,8 @@ class RenderNode(StrictModel):
 class RenderModel(StrictModel):
     screen_id: str
     theme: str
+    #: The screen's route in the site, when it was resolved as part of one.
+    route: str | None = None
     css_variables: dict[str, str] = Field(default_factory=dict)
     root: RenderNode
     reduced_motion: bool = False

@@ -750,6 +750,8 @@ The Planner determines:
 - screen purpose
 - key content
 - required interactions
+- (M13) each screen's `route` and `nav_label`, its `links` as `{intent, to}` edges from the intent
+  vocabulary, and the `journey` as `{screen, intent, to}` steps that must be among those links
 
 The Planner does NOT determine:
 

@@ -6,14 +6,21 @@ from typing import Protocol
 from app.models import (
     ClarifiedRequirements,
     ClarifierOutput,
+    ContentModel,
     DesignDirection,
     DesignSpec,
     FixResult,
+    FlowFixResult,
+    FlowReport,
+    JourneyStep,
     LearningEvent,
     Lesson,
+    RenderContext,
     RenderModel,
     RenderResult,
     ScreenPlan,
+    SiteMap,
+    SiteModel,
     UXPlan,
     VerificationResult,
 )
@@ -32,6 +39,14 @@ class DesignDirectorService(Protocol):
     async def direct(
         self, req: ClarifiedRequirements, plan: UXPlan, brief: str = ""
     ) -> DesignDirection: ...
+
+
+class ContentModelService(Protocol):
+    """M13. Decides once per run what the product lists, so every screen agrees."""
+
+    async def compose(
+        self, req: ClarifiedRequirements, plan: UXPlan, brief: str = ""
+    ) -> ContentModel: ...
 
 
 class RetrievalService(Protocol):
@@ -62,6 +77,7 @@ class CopywriterService(Protocol):
         direction: DesignDirection,
         spec: DesignSpec,
         brief: str = "",
+        content: ContentModel | None = None,
     ) -> DesignSpec: ...
 
 
@@ -74,11 +90,29 @@ class ImageryService(Protocol):
 class DesignResolverService(Protocol):
     """Deterministic. Must not call an LLM."""
 
-    def resolve(self, spec: DesignSpec, *, reduced_motion: bool = False) -> RenderModel: ...
+    def resolve(
+        self, spec: DesignSpec, *, reduced_motion: bool = False, site: SiteMap | None = None
+    ) -> RenderModel: ...
 
 
 class RendererService(Protocol):
-    async def render(self, model: RenderModel) -> RenderResult: ...
+    async def render(
+        self, model: RenderModel, context: RenderContext | None = None
+    ) -> RenderResult: ...
+
+
+class FlowCheckService(Protocol):
+    """M13. Walks the declared journeys through the assembled site in a browser. Deterministic."""
+
+    async def check(self, site: SiteModel, journey: list[JourneyStep]) -> FlowReport: ...
+
+
+class FlowFixerService(Protocol):
+    async def fix(
+        self, plan: UXPlan, report: FlowReport, direction: DesignDirection
+    ) -> FlowFixResult: ...
+
+    def apply(self, plan: UXPlan, fix: FlowFixResult) -> UXPlan: ...
 
 
 class VerifierService(Protocol):

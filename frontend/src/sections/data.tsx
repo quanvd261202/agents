@@ -12,7 +12,7 @@ import {
   ChevronsUpDown, Download, FolderOpen, Info, MessageSquare, MoreHorizontal, Plus, Repeat, Search, ShoppingBag,
   SlidersHorizontal, Star, UserPlus, Users, Wallet, X, XCircle, type LucideIcon,
 } from "lucide-react";
-import { Avatar, Button, listProp, prop, range, variantOf } from "../ui";
+import { Avatar, Button, listProp, hrefOf, prop, range, variantOf } from "../ui";
 import { cn } from "../lib/cn";
 import type { RenderNode } from "../types";
 import type { NodeProps, SectionMap } from "./types";
@@ -1032,7 +1032,7 @@ function EmptyState({ node }: NodeProps) {
             <h2 className="text-body font-semibold">{title}</h2>
             <p className="mt-1 text-small text-muted text-pretty">{body}</p>
           </div>
-          <Button size="sm" className="self-start @xl:self-auto"><Plus aria-hidden className="size-4" />{primary}</Button>
+          <Button size="sm" href={hrefOf(node, "primary_cta")} data-role="primary_cta" className="self-start @xl:self-auto"><Plus aria-hidden className="size-4" />{primary}</Button>
         </div>
       </Panel>
     );
@@ -1047,7 +1047,7 @@ function EmptyState({ node }: NodeProps) {
           <h2 className="font-heading-set text-h4 text-balance">{title}</h2>
           <p className="mt-3 text-body text-muted text-pretty">{body}</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button><Plus aria-hidden className="size-4" />{primary}</Button>
+            <Button href={hrefOf(node, "primary_cta")} data-role="primary_cta"><Plus aria-hidden className="size-4" />{primary}</Button>
             <Button variant="secondary">{secondary}</Button>
           </div>
         </div>

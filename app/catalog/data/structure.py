@@ -14,6 +14,13 @@ from app.catalog.data._helpers import (  # noqa: F401
 COMPONENTS: list[ComponentDefinition] = [
     ComponentDefinition(
         id="navigation",
+        emits={
+            "nav": ["*"],
+            "logo": ["go_home"],
+            "cart": ["view_cart"],
+            "account": ["sign_in", "open_dashboard", "open_settings"],
+            "cta": ["sign_up", "browse", "compare_plans", "contact"],
+        },
         category=C.navigation,
         description=(
             "Top navigation bar: logo, links, actions (search, account, cart with count, CTA) "
@@ -87,6 +94,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="breadcrumb",
+        emits={"trail": ["*"]},
         category=C.navigation,
         description="Breadcrumb trail; long trails collapse behind an ellipsis on phones",
         capabilities=["navigation", "wayfinding"],
@@ -144,6 +152,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="footer",
+        emits={"nav": ["*"], "logo": ["go_home"]},
         category=C.structure,
         description=(
             "Site footer: standard link columns, minimal single line, or mega with newsletter, "
@@ -179,6 +188,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="announcement_bar",
+        emits={"link_label": ["browse", "compare_plans", "learn_more"]},
         category=C.structure,
         description="Thin dismissible promo or notice strip above the navigation",
         capabilities=["announcement", "promotion", "dismissible"],
@@ -202,6 +212,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="category_nav",
+        emits={"cta": ["browse"]},
         category=C.navigation,
         description="Horizontal category navigation with active state; scrolls sideways on phones",
         capabilities=["navigation", "browse", "filter", "responsive"],
@@ -248,6 +259,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="section_header",
+        emits={"cta": ["browse", "learn_more"]},
         category=C.structure,
         description="Standalone eyebrow, title, body and action that opens a group of sections",
         capabilities=["hierarchy", "wayfinding", "storytelling"],
@@ -269,6 +281,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="sticky_cta_bar",
+        emits={"cta": ["add_to_cart", "checkout", "sign_up", "browse"], "promo_cta": ["browse"]},
         category=C.structure,
         description=(
             "Sticky bar with a short summary and the primary CTA: docked purchase bar, floating "

@@ -51,6 +51,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="auth_form",
+        emits={"cta": ["open_dashboard", "go_home"]},
         category=C.forms,
         description=(
             "Sign in / sign up form with social buttons, labelled email and password fields, "

@@ -8,9 +8,12 @@ from app.db import InMemoryRunRepository
 from app.models import (
     ClarifiedRequirements,
     ClarifierOutput,
+    ContentModel,
     DesignDirection,
     DesignSpec,
     FixResult,
+    FlowFixResult,
+    FlowReport,
     Issue,
     Patch,
     RenderModel,
@@ -50,6 +53,10 @@ class StubServices:
         self.screens = screens
         self.briefs: list[str] = []
         self.copy_briefs: list[str] = []
+        self.contents: list[ContentModel | None] = []
+        self.sites: list = []
+        self.render_contexts: list = []
+        self.checked: list = []
         self.calls: list[str] = []
 
     async def clarify(self, requirement, answers):
@@ -64,7 +71,7 @@ class StubServices:
         return UXPlan(
             product="x",
             user_goals=["buy"],
-            journey=["a"],
+            journey=[],
             screens=[ScreenPlan(id=s, purpose="d") for s in self.screens],
         )
 
@@ -80,6 +87,10 @@ class StubServices:
             screens=[ScreenDirection(screen_id=s, recipe="saas_landing") for s in self.screens],
         )
 
+    async def compose(self, req, plan, brief=""):
+        self.calls.append("compose")
+        return ContentModel(brand="Stub & Co")
+
     async def retrieve(self, req, direction, recipe, lessons=None):
         self.calls.append("retrieve")
         return RetrievedContext(
@@ -90,26 +101,39 @@ class StubServices:
         self.calls.append("build")
         return SPEC.model_copy(update={"screen_id": screen.id})
 
-    async def write(self, req, screen, direction, spec, brief=""):
+    async def write(self, req, screen, direction, spec, brief="", content=None):
         self.calls.append("write")
         self.copy_briefs.append(brief)
+        self.contents.append(content)
         return spec
 
     async def illustrate(self, spec):
         self.calls.append("illustrate")
         return spec
 
-    def resolve(self, spec, *, reduced_motion=False):
+    def resolve(self, spec, *, reduced_motion=False, site=None):
         self.calls.append("resolve")
+        self.sites.append(site)
         return RenderModel(
             screen_id=spec.screen_id,
             theme=spec.theme,
+            route=site.route(spec.screen_id) if site is not None else None,
             root=RenderNode(id="root", semantic_type="page", implementation="Page"),
         )
 
-    async def render(self, model):
+    async def render(self, model, context=None):
         self.calls.append("render")
+        self.render_contexts.append(context)
         return RenderResult(html="<div/>")
+
+    async def check(self, site, journey):
+        self.calls.append("check")
+        self.checked.append(site)
+        return FlowReport(steps=[])
+
+    async def flow_fix(self, plan, report, direction):
+        self.calls.append("flow_fix")
+        return FlowFixResult(status="failure", reason="stub")
 
     async def verify(self, spec, model, result):
         self.calls.append("verify")
@@ -168,6 +192,7 @@ def make_services(stub: StubServices, max_iter: int = 3) -> Services:
         clarifier=stub,
         planner=stub,
         director=stub,
+        content=stub,
         retrieval=stub,
         builder=stub,
         copywriter=stub,
@@ -177,7 +202,22 @@ def make_services(stub: StubServices, max_iter: int = 3) -> Services:
         verifier=stub,
         fixer=stub,
         learning=stub,
+        flow=stub,
+        flow_fixer=_FlowFixerStub(stub),
     )
+
+
+class _FlowFixerStub:
+    """The fixer protocol has `fix`, which the shared stub already uses for the design fixer."""
+
+    def __init__(self, stub: StubServices) -> None:
+        self._stub = stub
+
+    async def fix(self, plan, report, direction):
+        return await self._stub.flow_fix(plan, report, direction)
+
+    def apply(self, plan, fix):
+        return plan
 
 
 @pytest.fixture

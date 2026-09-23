@@ -6,13 +6,18 @@ from typing import Annotated, TypedDict
 from app.models import (
     ClarifiedRequirements,
     ClarifierOutput,
+    ContentModel,
     DesignDirection,
     DesignSpec,
     FixResult,
+    FlowFixResult,
+    FlowReport,
     LearningEvent,
     RenderModel,
     RenderResult,
     ScreenPlan,
+    SiteMap,
+    SiteModel,
     UXPlan,
     VerificationResult,
 )
@@ -27,6 +32,9 @@ class ScreenState(TypedDict, total=False):
     user_requirement: str
     clarified_requirements: ClarifiedRequirements
     design_direction: DesignDirection
+    content_model: ContentModel | None
+    #: Routes and links of every planned screen: the resolver wires hrefs from it.
+    site_map: SiteMap
     screen: ScreenPlan
     retrieved_context: RetrievedContext | None
     design_spec: DesignSpec | None
@@ -48,8 +56,14 @@ class AgentState(TypedDict, total=False):
     clarified_requirements: ClarifiedRequirements | None
     ux_plan: UXPlan | None
     design_direction: DesignDirection | None
+    #: What the product lists, decided once so every screen shows the same things.
+    content_model: ContentModel | None
     #: Final state of every planned screen, in plan order.
     screens: Annotated[list[ScreenState], operator.add]
+    #: The assembled site, the walk through its journeys and the plan repair, if one was needed.
+    site_model: SiteModel | None
+    flow_report: FlowReport | None
+    flow_fix: FlowFixResult | None
     learning_events: Annotated[list[LearningEvent], operator.add]
     errors: Annotated[list[str], operator.add]
     usage: Annotated[list[dict[str, float | str]], operator.add]

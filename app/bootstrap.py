@@ -2,10 +2,12 @@
 
 from app.agents import (
     ClarifierAgent,
+    ContentModelAgent,
     CopywriterAgent,
     DesignBuilderAgent,
     DirectorAgent,
     FixerAgent,
+    FlowFixerAgent,
     PlannerAgent,
     VerifierAgent,
 )
@@ -15,6 +17,7 @@ from app.core.config import Settings
 from app.core.llm import build_llm_provider
 from app.db import build_run_repository
 from app.dsl import default_design_resolver
+from app.flow.check import FlowChecker
 from app.imagery import Illustrator, build_image_provider
 from app.learning.factory import build_learning_service
 from app.recipes import default_recipe_registry
@@ -52,6 +55,7 @@ async def build_services(settings: Settings) -> Services:  # noqa: D103
         clarifier=ClarifierAgent(llm, recipes, settings.max_clarifier_questions),
         planner=PlannerAgent(llm, recipes),
         director=DirectorAgent(llm, default_theme_registry(), recipes, animations),
+        content=ContentModelAgent(llm, settings.content_items),
         retrieval=await build_retrieval_service(settings),
         builder=DesignBuilderAgent(llm, recipes, components, animations),
         copywriter=CopywriterAgent(llm, components),
@@ -66,4 +70,6 @@ async def build_services(settings: Settings) -> Services:  # noqa: D103
         verifier=VerifierAgent(vision, recipes),
         fixer=FixerAgent(llm, recipes, components, resolver),
         learning=await build_learning_service(settings),
+        flow=FlowChecker(),
+        flow_fixer=FlowFixerAgent(llm, recipes, components),
     )

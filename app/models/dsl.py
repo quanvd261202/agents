@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from app.models.common import Density, Intensity, StrictModel
+from app.models.content import ItemBinding
 
 
 class LayoutIntent(StrictModel):
@@ -41,6 +42,9 @@ class SectionSpec(StrictModel):
     #: description in `content`. Filled by the imagery service; absent means the art-directed
     #: placeholder renders instead.
     images: dict[str, list[ImageRef]] = Field(default_factory=dict)
+    #: The content-model item this section shows, when it shows one (a product card, the buy
+    #: box). Set by the Copywriter; the resolver passes it to the frontend for routing.
+    binding: ItemBinding | None = None
 
 
 class DesignSpec(StrictModel):

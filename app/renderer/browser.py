@@ -14,6 +14,7 @@ from app.core.logging import get_logger
 from app.core.telemetry import record
 from app.models.common import Breakpoint, Dimension, Severity
 from app.models.render import RenderModel, RenderResult
+from app.models.site import RenderContext
 from app.models.verification import Issue
 from app.renderer.server import StaticServer
 
@@ -21,6 +22,7 @@ log = get_logger(__name__)
 
 CHECKS_JS = (Path(__file__).parent / "checks.js").read_text()
 _DISPATCH_JS = "model => window.dispatchEvent(new CustomEvent('uib:model', {detail: model}))"
+_DISPATCH_SITE_JS = "site => window.dispatchEvent(new CustomEvent('uib:site', {detail: site}))"
 
 # Scroll-triggered entrance animations start at opacity 0. A full-page screenshot taken without
 # scrolling first would capture blank sections, so walk the page once and return to the top.
@@ -101,10 +103,14 @@ class PlaywrightRenderer:
         self._server = server
         self._owns_server = server is None
 
-    async def render(self, model: RenderModel) -> RenderResult:
-        return (await self.render_with_findings(model)).result
+    async def render(
+        self, model: RenderModel, context: RenderContext | None = None
+    ) -> RenderResult:
+        return (await self.render_with_findings(model, context)).result
 
-    async def render_with_findings(self, model: RenderModel) -> RenderOutput:
+    async def render_with_findings(
+        self, model: RenderModel, context: RenderContext | None = None
+    ) -> RenderOutput:
         try:
             from playwright.async_api import async_playwright
         except ImportError as e:  # pragma: no cover
@@ -122,7 +128,7 @@ class PlaywrightRenderer:
                     args=["--force-color-profile=srgb", "--font-render-hinting=none"]
                 )
                 try:
-                    return await self._render_all(browser, server.url, model, start)
+                    return await self._render_all(browser, server.url, model, start, context)
                 finally:
                     await browser.close()
         except RenderError:
@@ -136,9 +142,23 @@ class PlaywrightRenderer:
                 server.stop()
 
     async def _render_all(
-        self, browser: Any, url: str, model: RenderModel, start: float
+        self,
+        browser: Any,
+        url: str,
+        model: RenderModel,
+        start: float,
+        context: RenderContext | None = None,
     ) -> RenderOutput:
         payload = model.model_dump(mode="json")
+        site_payload = (
+            {
+                "site": context.site.model_dump(mode="json"),
+                "content": context.content.model_dump(mode="json") if context.content else None,
+                "screens": {},
+            }
+            if context is not None
+            else None
+        )
         screenshots: dict[Breakpoint, str] = {}
         findings: list[Issue] = []
         outline: dict[Breakpoint, list[dict[str, Any]]] = {}
@@ -155,8 +175,14 @@ class PlaywrightRenderer:
             )
             page.on("pageerror", lambda e: console_errors.append(str(e)))
             await page.add_init_script(_PERF_JS)
+            if context is not None:
+                # Seeded before the bundle loads, so the store starts from it.
+                state = json.dumps(context.state.model_dump(mode="json"))
+                await page.add_init_script(f"window.__uibState = {state};")
             try:
                 await page.goto(url, wait_until="load")
+                if site_payload is not None:
+                    await page.evaluate(_DISPATCH_SITE_JS, site_payload)
                 await page.evaluate(_DISPATCH_JS, payload)
                 await page.wait_for_function("window.__uibReady === true", timeout=15_000)
                 await page.evaluate("document.fonts ? document.fonts.ready : true")

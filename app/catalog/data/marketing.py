@@ -15,6 +15,10 @@ from app.catalog.data._helpers import (  # noqa: F401
 COMPONENTS: list[ComponentDefinition] = [
     ComponentDefinition(
         id="hero",
+        emits={
+            "primary_cta": ["browse", "sign_up", "open_dashboard", "compare_plans", "contact"],
+            "secondary_cta": ["learn_more", "compare_plans", "browse", "contact"],
+        },
         category=C.marketing,
         description="Primary hero with headline, subhead, CTA and media",
         capabilities=["hero", "conversion", "headline", "responsive"],
@@ -81,6 +85,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="feature_bento",
+        emits={"cta": ["learn_more", "browse"]},
         category=C.marketing,
         description=(
             "Bento grid of features with mixed tile sizes: a large media tile, a wide tile, "
@@ -144,6 +149,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="product_showcase",
+        emits={"cta": ["sign_up", "browse", "learn_more"]},
         category=C.marketing,
         description=(
             "Large product or screen showcase: a staged image with callouts (standard), a "
@@ -242,6 +248,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="pricing_table",
+        emits={"cta": ["sign_up", "checkout"]},
         category=C.marketing,
         description=(
             "Pricing tiers or membership plans with feature lists; highlighted raises the "
@@ -282,6 +289,10 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="cta",
+        emits={
+            "primary_cta": ["browse", "sign_up", "compare_plans", "contact"],
+            "secondary_cta": ["learn_more", "contact"],
+        },
         category=C.marketing,
         description=(
             "Closing call to action: centred on a surface band (standard), a compact dark "
@@ -308,6 +319,10 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="cta_split",
+        emits={
+            "primary_cta": ["browse", "sign_up", "compare_plans", "contact"],
+            "secondary_cta": ["learn_more", "contact"],
+        },
         category=C.marketing,
         description=(
             "Two-column call to action: copy and buttons beside an image with a status panel "

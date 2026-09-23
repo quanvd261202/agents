@@ -36,6 +36,7 @@ def _header_slots(*extra: str) -> list[S]:
 COMPONENTS: list[ComponentDefinition] = [
     ComponentDefinition(
         id="product_card",
+        emits={"card": ["open_item"]},
         category=C.commerce,
         description="Product summary card with image, price, action",
         capabilities=["product_summary", "commerce", "responsive"],
@@ -48,6 +49,13 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="price", required=True),
             S(name="badge"),
         ],
+        binds={
+            "title": "title",
+            "subtitle": "note",
+            "price": "price",
+            "badge": "badge",
+            "image": "image",
+        },
         implementation=_impl(
             "ProductCard",
             ("Card", "shadcn"),
@@ -60,6 +68,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="product_grid",
+        emits={"cta": ["browse"]},
         category=C.commerce,
         description="Responsive grid of product cards with a section header and view-all link",
         capabilities=["commerce", "browse", "grid", "responsive"],
@@ -74,6 +83,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="product_detail",
+        emits={"primary_cta": ["add_to_cart"]},
         category=C.commerce,
         description=(
             "Product page lead: gallery with thumbnails, name, price, rating, size / temperature / "
@@ -116,6 +126,7 @@ COMPONENTS: list[ComponentDefinition] = [
             S(name="notes_label"),
             S(name="shipping_label"),
         ],
+        binds={"title": "title", "price": "price", "badge": "badge"},
         implementation=_impl(
             "ProductDetail",
             ("Carousel", "embla", "gallery"),
@@ -172,6 +183,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="related_products",
+        emits={"cta": ["browse"]},
         category=C.commerce,
         description="Cross-sell products as a carousel or a grid of product cards",
         capabilities=["commerce", "cross_sell"],
@@ -222,6 +234,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="cart_items",
+        emits={"continue_cta": ["browse", "go_home"]},
         category=C.commerce,
         description=(
             "Cart line items with quantity, remove and save to wishlist; standard is a cart page "
@@ -248,6 +261,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="order_summary",
+        emits={"primary_cta": ["checkout"]},
         category=C.commerce,
         description=(
             "Subtotal, delivery, discount, tax, total. standard adds discount code, gift note and "
@@ -288,6 +302,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="collection_grid",
+        emits={"cta": ["browse"], "tile_cta": ["browse"]},
         category=C.commerce,
         description=(
             "Featured collections as large image tiles with title, count and a hover reveal; "
@@ -320,6 +335,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="promo_banner",
+        emits={"cta": ["browse", "open_item"]},
         category=C.commerce,
         description=(
             "Seasonal or promotional campaign with headline, offer, code, countdown text and CTA; "
@@ -347,6 +363,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="product_customizer",
+        emits={"primary_cta": ["add_to_cart"]},
         category=C.commerce,
         description=(
             "Standalone drink / product configurator: size, temperature, milk, sweetness, extras, "
@@ -393,6 +410,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="search_bar",
+        emits={"all_results_cta": ["browse"]},
         category=C.commerce,
         description=(
             "Prominent product search with popular suggestions and recent-search chips; standard "
@@ -420,6 +438,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="category_hero",
+        emits={"trail": ["*"]},
         category=C.commerce,
         description=(
             "Listing page header (h1): breadcrumb, category title, description, count, media and "
@@ -450,6 +469,10 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="product_spotlight",
+        emits={
+            "primary_cta": ["add_to_cart", "open_item", "browse"],
+            "secondary_cta": ["learn_more", "browse"],
+        },
         category=C.commerce,
         description=(
             "One hero product told editorially: large media, story, key notes, price and CTA; "
@@ -486,6 +509,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="subscription_offer",
+        emits={"primary_cta": ["add_to_cart", "sign_up"], "secondary_cta": ["learn_more"]},
         category=C.commerce,
         description=(
             "Subscribe & save: one-time or subscription plan choice, delivery frequency, perks "
@@ -527,6 +551,7 @@ COMPONENTS: list[ComponentDefinition] = [
     ),
     ComponentDefinition(
         id="lookbook",
+        emits={"look_cta": ["browse"]},
         category=C.commerce,
         description=(
             "Editorial image grid; hotspots variant has shoppable product pins over imagery, "

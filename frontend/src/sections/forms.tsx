@@ -11,8 +11,9 @@ import {
   Bell, Building2, Check, ChevronDown, CreditCard, Eye, EyeOff, KeyRound, Lock, Mail, Palette, Shield, Store, Truck,
   User, Users, Wallet, X, Zap, type LucideIcon,
 } from "lucide-react";
-import { Avatar, Button, Media, imageAt, listProp, prop, subjectOf, variantOf } from "../ui";
+import { Avatar, Button, Media, imageAt, listProp, hrefOf, prop, subjectOf, variantOf } from "../ui";
 import { cn } from "../lib/cn";
+import { navigate } from "../site/router";
 import type { NodeProps, SectionMap } from "./types";
 
 /* ================================================================== field kit */
@@ -645,12 +646,12 @@ const RULES: { label: string; test: (p: string) => boolean }[] = [
 
 function SignInFields({ node, id }: { node: NodeProps["node"]; id: (k: string) => string }) {
   return (
-    <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+    <form className="space-y-5" onSubmit={(e) => { e.preventDefault(); const to = hrefOf(node, "cta"); if (to) navigate(to); }}>
       <TextField id={id("email")} label="Email" type="email" autoComplete="email" placeholder="you@example.com" />
       <PasswordField id={id("pw")} label="Password" autoComplete="current-password"
         aside={<a href="#" className={cn(linkCls, "text-caption font-medium")}>{prop(node, "forgot_link", "Forgot password?")}</a>} />
       <CheckField id={id("remember")} label="Keep me signed in on this device" />
-      <Button type="submit" className="w-full">{prop(node, "cta", "Sign in")}</Button>
+      <Button type="submit" data-role="cta" className="w-full">{prop(node, "cta", "Sign in")}</Button>
     </form>
   );
 }
